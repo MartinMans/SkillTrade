@@ -1,0 +1,171 @@
+/* Global Reset and Base Styles */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  background-color: #000;
+}
+
+/* App Container */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fixed Navbar: Positioned at the top with reduced height and font scaling */
+.navbar {
+  position: fixed;
+  width: 100%;
+  top: 0;
+  z-index: 999;
+  height: 63px; /* 10% reduction from 70px */
+  font-size: 90%;
+}
+body {
+  padding-top: 63px; /* Offset to prevent content from being hidden behind the navbar */
+}
+
+/* Navbar Link and Button Styles */
+.navbar-nav .nav-link {
+  color: #fff !important;
+  margin: 0 5px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.navbar-nav .nav-link:hover {
+  opacity: 0.8;
+}
+.navbar .btn-primary {
+  margin-left: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* Hero Section: Full-screen background with dark overlay */
+.hero-section {
+  position: relative;
+  background-image: url('../assets/hero_bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  height: 100vh;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hero-section::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: rgba(0, 0, 0, 0.5); /* Overlay for improved text readability */
+}
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 700px;
+  margin: 0 auto;
+  text-align: center;
+}
+.hero-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+}
+.mini-about {
+  font-size: 1.2rem;
+  margin-bottom: 2rem;
+}
+.hero-btn {
+  margin-top: 20px;
+  font-size: 1.1rem;
+}
+
+/* Unified Section: Background for the About section with matching dark overlay */
+.unified-section {
+  position: relative;
+  background-image: url('../assets/about_bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  height: 100vh;
+  padding: 60px 0;
+}
+.unified-section::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: rgba(0, 0, 0, 0.5); /* Same dark overlay as hero */
+  z-index: 1;
+}
+
+/* About Section: Card layout over the unified background */
+#about {
+  position: relative;
+  z-index: 2;
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  color: #333;
+  padding: 20px 0;
+}
+#about .about-card {
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 30px;
+  border: none;
+  border-radius: 8px;
+  margin: 0 auto;
+}
+#about h2 {
+  color: #fff;
+  font-weight: bold;
+  font-size: 2.5rem;
+  text-transform: uppercase;
+  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+  margin-bottom: 1rem;
+}
+#about .card-text {
+  font-size: 1.2rem;
+  line-height: 1.6;
+}
+
+/* Dropdown Styling: Smooth animations and centered positioning under "Features" */
+.smooth-dropdown {
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  opacity: 0;
+  visibility: hidden;
+  display: block;
+}
+.nav-item.dropdown .custom-dropdown {
+  position: absolute;
+  top: 100%;            /* Directly below the toggle link */
+  left: 50%;            /* Center horizontally relative to parent */
+  transform: translateX(-50%);
+  min-width: 240px;
+  white-space: nowrap;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  opacity: 0;
+  visibility: hidden;
+  display: block;
+}
+.nav-item.dropdown .custom-dropdown.show,
+.smooth-dropdown.custom-dropdown {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Dropdown Items: Centered text with black borders between items */
+.dropdown-item-custom {
+  border-bottom: 1px solid #000;
+  padding: 5px 10px;
+  white-space: nowrap;
+  margin: 0;
+  text-align: center;
+}
+.dropdown-item-custom:last-child {
+  border-bottom: none;
+}
