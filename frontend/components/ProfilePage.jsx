@@ -1,72 +1,471 @@
 // Profile page component with three main sections
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
+
+// Move AddSkillModal outside of ProfilePage
+const AddSkillModal = ({ 
+  show, 
+  onClose, 
+  onAddSkill, 
+  skillType, 
+  searchQuery, 
+  setSearchQuery, 
+  searchResults, 
+  isSearching 
+}) => {
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const inputRef = useRef(null);
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (show) {
+      setLocalSearchQuery(searchQuery);
+      setSelectedIndex(-1);
+      // Focus input when modal opens
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }
+  }, [show, searchQuery]);
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setLocalSearchQuery(value);
+    setSearchQuery(value);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown' && selectedIndex < searchResults.length - 1) {
+      e.preventDefault();
+      setSelectedIndex(prev => prev + 1);
+    } else if (e.key === 'ArrowUp' && selectedIndex > -1) {
+      e.preventDefault();
+      setSelectedIndex(prev => prev - 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < searchResults.length) {
+        onAddSkill(searchResults[selectedIndex].skill_id);
+        onClose();
+      } else if (localSearchQuery.trim()) {
+        // Create new skill
+        onAddSkill(null, localSearchQuery.trim());
+        onClose();
+      }
+    }
+  };
+
+  const handleCreateNewSkill = () => {
+    if (localSearchQuery.trim()) {
+      onAddSkill(null, localSearchQuery.trim());
+      onClose();
+    }
+  };
+
+  if (!show) return null;
+
+  return (
+    <div className="modal" style={{ display: 'block' }}>
+      <div className="modal-content">
+        <h3>Add {skillType === 'teach' ? 'Teaching' : 'Learning'} Skill</h3>
+        <div className="skill-search">
+          <input
+            ref={inputRef}
+            type="text"
+            className="form-control"
+            placeholder="Search or type a new skill..."
+            value={localSearchQuery}
+            onChange={handleSearchChange}
+            onKeyDown={handleKeyDown}
+            autoFocus
+          />
+        </div>
+        <div className="skill-list">
+          {isSearching ? (
+            <div className="loading">Searching...</div>
+          ) : (
+            <>
+              {searchResults.map((skill, index) => (
+                <div 
+                  key={skill.skill_id} 
+                  className={`skill-item ${index === selectedIndex ? 'selected' : ''}`}
+                  onClick={() => {
+                    setSelectedIndex(index);
+                    onAddSkill(skill.skill_id);
+                    onClose();
+                  }}
+                >
+                  {skill.skill_name}
+                </div>
+              ))}
+              {localSearchQuery.trim() && searchResults.length === 0 && (
+                <div 
+                  className="create-new-skill"
+                  onClick={handleCreateNewSkill}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="input-group">
+                    <span className="input-group-text">
+                      <i className="fas fa-plus"></i>
+                    </span>
+                    <span className="form-control">
+                      Create "{localSearchQuery.trim()}" as a new skill
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <div className="modal-actions">
+          <button 
+            className="btn btn-secondary" 
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 function ProfilePage() {
   const [userProfile, setUserProfile] = useState({
-    username: "John Doe",
-    email: "john.doe@example.com",
-    teachingSkills: [
-      "Web Development",
-      "JavaScript",
-      "React"
-    ],
-    learningInterests: [
-      "Spanish Language",
-      "Digital Marketing",
-      "UI/UX Design"
-    ]
+    username: "",
+    email: "",
+    user_id: null,
+    teachingSkills: [],
+    learningInterests: []
   });
-  const [skillMatches, setSkillMatches] = useState([
-    // Temporary mock data for testing
-    {
-      id: 1,
-      username: "Sarah Chen",
-      rating: 4.8,
-      wantsToLearn: "Python Programming",
-      canTeach: "Digital Marketing",
-      matchScore: 95
-    },
-    {
-      id: 2,
-      username: "Michael Brown",
-      rating: 4.6,
-      wantsToLearn: "Spanish Language",
-      canTeach: "Web Development",
-      matchScore: 88
-    },
-    {
-      id: 3,
-      username: "Emma Wilson",
-      rating: 4.9,
-      wantsToLearn: "Guitar",
-      canTeach: "French Language",
-      matchScore: 85
-    }
-  ]);
+  const [availableSkills, setAvailableSkills] = useState([]);
+  const [showAddSkillModal, setShowAddSkillModal] = useState(false);
+  const [newSkillType, setNewSkillType] = useState(null); // 'teach' or 'learn'
+  const [selectedSkill, setSelectedSkill] = useState(null);
+  const [skillMatches, setSkillMatches] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [activeSection, setActiveSection] = useState('matches');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showCreateNew, setShowCreateNew] = useState(false);
+  const [newSkillName, setNewSkillName] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [inputRef, setInputRef] = useState(null);
 
-  // Fetch user profile data
+  // Fetch user profile data and available skills
   useEffect(() => {
-    const fetchUserProfile = async () => {
+    let isMounted = true;
+
+    const fetchData = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch('http://127.0.0.1:8000/users/me', {
+        if (!token) {
+          throw new Error('No token found');
+        }
+
+        // Fetch user profile
+        const userResponse = await fetch('http://127.0.0.1:8000/users/me', {
+          method: 'GET',
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
-        if (response.ok) {
-          const data = await response.json();
-          setUserProfile(data);
+        
+        if (!userResponse.ok) {
+          if (userResponse.status === 401) {
+            // Token expired or invalid
+            localStorage.removeItem('token');
+            window.dispatchEvent(new CustomEvent('loginStateChanged', { detail: { isLoggedIn: false } }));
+            const root = document.getElementById('root');
+            ReactDOM.render(React.createElement(HomePage), root);
+            return;
+          }
+          const errorData = await userResponse.json();
+          throw new Error(typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
         }
+
+        const userData = await userResponse.json();
+        
+        // Fetch user's skills
+        const skillsResponse = await fetch(`http://127.0.0.1:8000/users/${userData.user_id}/skills/`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (!skillsResponse.ok) {
+          const errorData = await skillsResponse.json();
+          throw new Error(typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
+        }
+        const skillsData = await skillsResponse.json();
+
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setUserProfile({
+            ...userData,
+            teachingSkills: skillsData.teaching.map(skill => skill.skill_name),
+            learningInterests: skillsData.learning.map(skill => skill.skill_name)
+          });
+        }
+
+        // Fetch available skills
+        const availableSkillsResponse = await fetch('http://127.0.0.1:8000/skills/', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        if (!availableSkillsResponse.ok) {
+          const errorData = await availableSkillsResponse.json();
+          throw new Error(typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
+        }
+        const availableSkillsData = await availableSkillsResponse.json();
+        
+        if (isMounted) {
+          setAvailableSkills(availableSkillsData);
+        }
+
       } catch (error) {
-        console.error('Error fetching profile:', error);
+        console.error('Error fetching data:', error);
+        if (isMounted) {
+          // Handle error state
+          setUserProfile(prev => ({
+            ...prev,
+            error: error.message
+          }));
+        }
       }
     };
 
-    fetchUserProfile();
-  }, []);
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Empty dependency array since we only want to fetch once on mount
+
+  // Add debounced search function
+  useEffect(() => {
+    const searchSkills = async () => {
+      if (!searchQuery.trim()) {
+        setSearchResults([]);
+        setSelectedIndex(-1);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/skills/search/?query=${encodeURIComponent(searchQuery)}`);
+        if (!response.ok) throw new Error('Failed to search skills');
+        const data = await response.json();
+        setSearchResults(data);
+        setSelectedIndex(-1);
+      } catch (error) {
+        console.error('Error searching skills:', error);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timeoutId = setTimeout(searchSkills, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]); // Only depend on searchQuery
+
+  // Optimize handleAddSkill to handle both existing and new skills with optimistic updates
+  const handleAddSkill = async (skillId, newSkillName = null) => {
+    try {
+      const token = localStorage.getItem('token');
+      let finalSkillId = skillId;
+      let skillName = '';
+
+      // Optimistically update the UI
+      if (skillId) {
+        // For existing skills, find the skill name from availableSkills
+        const existingSkill = availableSkills.find(s => s.skill_id === skillId);
+        if (existingSkill) {
+          skillName = existingSkill.skill_name;
+        }
+      } else if (newSkillName) {
+        // For new skills, use the provided name
+        skillName = newSkillName.trim();
+      }
+
+      // Optimistically update the UI
+      setUserProfile(prev => ({
+        ...prev,
+        teachingSkills: newSkillType === 'teach' 
+          ? [...prev.teachingSkills, skillName]
+          : prev.teachingSkills,
+        learningInterests: newSkillType === 'learn'
+          ? [...prev.learningInterests, skillName]
+          : prev.learningInterests
+      }));
+
+      // If no skillId is provided, create a new skill
+      if (!skillId && newSkillName) {
+        const createResponse = await fetch('http://127.0.0.1:8000/skills/get-or-create/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ skill_name: newSkillName.trim() })
+        });
+
+        if (!createResponse.ok) {
+          // Revert the optimistic update
+          setUserProfile(prev => ({
+            ...prev,
+            teachingSkills: newSkillType === 'teach'
+              ? prev.teachingSkills.filter(s => s !== skillName)
+              : prev.teachingSkills,
+            learningInterests: newSkillType === 'learn'
+              ? prev.learningInterests.filter(s => s !== skillName)
+              : prev.learningInterests
+          }));
+          const errorData = await createResponse.json();
+          throw new Error(errorData.detail || 'Failed to create skill');
+        }
+        const newSkill = await createResponse.json();
+        finalSkillId = newSkill.skill_id;
+      }
+
+      // Add the skill to the user
+      const response = await fetch(`http://127.0.0.1:8000/users/${userProfile.user_id}/skills/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          skill_id: finalSkillId,
+          type: newSkillType
+        })
+      });
+
+      if (!response.ok) {
+        // Revert the optimistic update
+        setUserProfile(prev => ({
+          ...prev,
+          teachingSkills: newSkillType === 'teach'
+            ? prev.teachingSkills.filter(s => s !== skillName)
+            : prev.teachingSkills,
+          learningInterests: newSkillType === 'learn'
+            ? prev.learningInterests.filter(s => s !== skillName)
+            : prev.learningInterests
+        }));
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to add skill');
+      }
+
+      // Reset search state
+      setSearchQuery('');
+      setSearchResults([]);
+
+    } catch (error) {
+      console.error('Error adding skill:', error);
+      // Show error message to user
+      alert(error.message || 'Failed to add skill. Please try again.');
+    }
+  };
+
+  const handleRemoveSkill = async (skillName, type) => {
+    try {
+      const token = localStorage.getItem('token');
+
+      // Optimistically update the UI
+      setUserProfile(prev => ({
+        ...prev,
+        teachingSkills: type === 'teach'
+          ? prev.teachingSkills.filter(s => s !== skillName)
+          : prev.teachingSkills,
+        learningInterests: type === 'learn'
+          ? prev.learningInterests.filter(s => s !== skillName)
+          : prev.learningInterests
+      }));
+
+      // First, get the user's skills to find the correct user_skill entry
+      const skillsResponse = await fetch(`http://127.0.0.1:8000/users/${userProfile.user_id}/skills/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!skillsResponse.ok) {
+        // Revert the optimistic update
+        setUserProfile(prev => ({
+          ...prev,
+          teachingSkills: type === 'teach'
+            ? [...prev.teachingSkills, skillName]
+            : prev.teachingSkills,
+          learningInterests: type === 'learn'
+            ? [...prev.learningInterests, skillName]
+            : prev.learningInterests
+        }));
+        const errorData = await skillsResponse.json();
+        throw new Error(errorData.detail || 'Failed to fetch user skills');
+      }
+
+      const skillsData = await skillsResponse.json();
+      
+      // Find the skill in the correct category (teaching or learning)
+      const skillList = type === 'teach' ? skillsData.teaching : skillsData.learning;
+      const targetSkill = skillList.find(s => s.skill_name === skillName);
+      
+      if (!targetSkill) {
+        // Revert the optimistic update
+        setUserProfile(prev => ({
+          ...prev,
+          teachingSkills: type === 'teach'
+            ? [...prev.teachingSkills, skillName]
+            : prev.teachingSkills,
+          learningInterests: type === 'learn'
+            ? [...prev.learningInterests, skillName]
+            : prev.learningInterests
+        }));
+        throw new Error('Skill not found in user skills');
+      }
+
+      // Delete the skill
+      const response = await fetch(
+        `http://127.0.0.1:8000/users/${userProfile.user_id}/skills/${targetSkill.skill_id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        // Revert the optimistic update
+        setUserProfile(prev => ({
+          ...prev,
+          teachingSkills: type === 'teach'
+            ? [...prev.teachingSkills, skillName]
+            : prev.teachingSkills,
+          learningInterests: type === 'learn'
+            ? [...prev.learningInterests, skillName]
+            : prev.learningInterests
+        }));
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to remove skill');
+      }
+
+    } catch (error) {
+      console.error('Error removing skill:', error);
+      // Show error message to user
+      alert(error.message || 'Failed to remove skill. Please try again.');
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -78,6 +477,28 @@ function ProfilePage() {
   const handleHomeClick = () => {
     const root = document.getElementById('root');
     ReactDOM.render(React.createElement(HomePage), root);
+  };
+
+  const handleCreateNewSkill = async () => {
+    if (!newSkillName.trim()) return;
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/skills/get-or-create/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ skill_name: newSkillName.trim() })
+      });
+
+      if (!response.ok) throw new Error('Failed to create skill');
+      const newSkill = await response.json();
+      await handleAddSkill(newSkill.skill_id, newSkillType);
+      setNewSkillName('');
+      setShowCreateNew(false);
+    } catch (error) {
+      console.error('Error creating new skill:', error);
+    }
   };
 
   // Profile Section
@@ -98,10 +519,21 @@ function ProfilePage() {
               {userProfile.teachingSkills.map((skill, index) => (
                 <div key={index} className="skill-tag">
                   {skill}
-                  <button className="btn btn-sm btn-outline-danger ml-2">×</button>
+                  <button 
+                    className="btn btn-sm btn-outline-danger ml-2"
+                    onClick={() => handleRemoveSkill(skill, 'teach')}
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
-              <button className="btn btn-outline-primary btn-sm mt-2">
+              <button 
+                className="btn btn-outline-primary btn-sm mt-2"
+                onClick={() => {
+                  setNewSkillType('teach');
+                  setShowAddSkillModal(true);
+                }}
+              >
                 + Add Teaching Skills
               </button>
             </div>
@@ -112,16 +544,41 @@ function ProfilePage() {
               {userProfile.learningInterests.map((skill, index) => (
                 <div key={index} className="skill-tag">
                   {skill}
-                  <button className="btn btn-sm btn-outline-danger ml-2">×</button>
+                  <button 
+                    className="btn btn-sm btn-outline-danger ml-2"
+                    onClick={() => handleRemoveSkill(skill, 'learn')}
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
-              <button className="btn btn-outline-primary btn-sm mt-2">
+              <button 
+                className="btn btn-outline-primary btn-sm mt-2"
+                onClick={() => {
+                  setNewSkillType('learn');
+                  setShowAddSkillModal(true);
+                }}
+              >
                 + Add Learning Interests
               </button>
             </div>
           </div>
         </div>
       </div>
+      <AddSkillModal 
+        show={showAddSkillModal}
+        onClose={() => {
+          setShowAddSkillModal(false);
+          setSearchQuery('');
+          setSearchResults([]);
+        }}
+        onAddSkill={handleAddSkill}
+        skillType={newSkillType}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        searchResults={searchResults}
+        isSearching={isSearching}
+      />
     </div>
   );
 
