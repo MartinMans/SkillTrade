@@ -1,9 +1,28 @@
-fastapi
-uvicorn
-sqlalchemy
-psycopg2-binary
-pydantic
-python-multipart
-python-jose[cryptography]
-passlib[bcrypt]
-pydantic[email]
+# Core Framework
+fastapi==0.109.2
+uvicorn==0.27.1
+pydantic==2.6.1
+pydantic[email]==2.6.1
+
+# Database
+sqlalchemy==2.0.27
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+bcrypt==4.1.2
+
+# CORS & API
+starlette==0.36.3
+typing-extensions==4.9.0
+
+# Development Tools
+python-dotenv==1.0.1
+pytest==8.0.0
+httpx==0.26.0
+
+# Utilities
+email-validator==2.1.0.post1
