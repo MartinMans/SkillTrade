@@ -129,6 +129,58 @@ const AddSkillModal = ({
   );
 };
 
+// Add NoSkillsWarning component before ProfilePage function
+const NoSkillsWarning = ({ onNavigateToProfile }) => {
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) return null;
+
+  return (
+    <div className="alert alert-warning alert-dismissible fade show" role="alert">
+      <strong>No skills added yet!</strong> You haven't added any skills yet. Go to your profile to add skills and start matching!
+      <div className="mt-2">
+        <button 
+          className="btn btn-primary me-2" 
+          onClick={onNavigateToProfile}
+        >
+          Go to Profile
+        </button>
+        <button 
+          className="btn btn-secondary" 
+          onClick={() => setDismissed(true)}
+        >
+          Dismiss
+        </button>
+      </div>
+      <button 
+        type="button" 
+        className="btn-close" 
+        onClick={() => setDismissed(true)} 
+        aria-label="Close"
+      ></button>
+    </div>
+  );
+};
+
+// Add LoadingSpinner component before ProfilePage
+const LoadingSpinner = ({ text = "Loading..." }) => (
+  <div className="loading-container">
+    <div className="loading-spinner"></div>
+    <span className="loading-text">{text}</span>
+  </div>
+);
+
+// Update FullPageLoader component
+const FullPageLoader = () => (
+  <div className="full-page-loader">
+    <div className="loader-content">
+      <div className="loading-spinner"></div>
+      <h2 className="loading-title">Loading Your Profile!</h2>
+      <p className="loading-subtitle">This may take a moment.</p>
+    </div>
+  </div>
+);
+
 function ProfilePage() {
   const [userProfile, setUserProfile] = useState({
     username: "",
@@ -151,6 +203,9 @@ function ProfilePage() {
   const [newSkillName, setNewSkillName] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [inputRef, setInputRef] = useState(null);
+  const [hasSkills, setHasSkills] = useState(false);
+  const [hasRequiredSkills, setHasRequiredSkills] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   // Fetch user profile data and available skills
   useEffect(() => {
@@ -158,87 +213,97 @@ function ProfilePage() {
 
     const fetchData = async () => {
       try {
+        setProfileLoading(true); // Show loading screen immediately
+
         const token = localStorage.getItem('token');
         if (!token) {
           throw new Error('No token found');
         }
 
-        // Fetch user profile
-        const userResponse = await fetch('http://127.0.0.1:8000/users/me', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (!userResponse.ok) {
-          if (userResponse.status === 401) {
-            // Token expired or invalid
-            localStorage.removeItem('token');
-            window.dispatchEvent(new CustomEvent('loginStateChanged', { detail: { isLoggedIn: false } }));
-            const root = document.getElementById('root');
-            ReactDOM.render(React.createElement(HomePage), root);
-            return;
-          }
-          const errorData = await userResponse.json();
-          throw new Error(typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
+        // Fetch all data in parallel for better performance
+        const [userResponse, skillsResponse, availableSkillsResponse] = await Promise.all([
+          // Fetch user profile
+          fetch('http://127.0.0.1:8000/users/me', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          }),
+          // Fetch user's skills
+          fetch(`http://127.0.0.1:8000/users/me/skills/`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          }),
+          // Fetch available skills
+          fetch('http://127.0.0.1:8000/skills/', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          })
+        ]);
+
+        // Handle unauthorized access
+        if (userResponse.status === 401) {
+          localStorage.removeItem('token');
+          window.dispatchEvent(new CustomEvent('loginStateChanged', { detail: { isLoggedIn: false } }));
+          const root = document.getElementById('root');
+          ReactDOM.render(React.createElement(HomePage), root);
+          return;
         }
 
-        const userData = await userResponse.json();
-        
-        // Fetch user's skills
-        const skillsResponse = await fetch(`http://127.0.0.1:8000/users/${userData.user_id}/skills/`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (!skillsResponse.ok) {
-          const errorData = await skillsResponse.json();
-          throw new Error(typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
+        // Check if any request failed
+        if (!userResponse.ok || !skillsResponse.ok || !availableSkillsResponse.ok) {
+          throw new Error('Failed to fetch user data');
         }
-        const skillsData = await skillsResponse.json();
 
-        // Only update state if component is still mounted
+        // Parse all responses
+        const [userData, skillsData, availableSkillsData] = await Promise.all([
+          userResponse.json(),
+          skillsResponse.json(),
+          availableSkillsResponse.json()
+        ]);
+
         if (isMounted) {
+          const teachingSkills = skillsData.teaching.map(skill => skill.skill_name);
+          const learningSkills = skillsData.learning.map(skill => skill.skill_name);
+          
           setUserProfile({
             ...userData,
-            teachingSkills: skillsData.teaching.map(skill => skill.skill_name),
-            learningInterests: skillsData.learning.map(skill => skill.skill_name)
+            teachingSkills,
+            learningInterests: learningSkills
           });
-        }
 
-        // Fetch available skills
-        const availableSkillsResponse = await fetch('http://127.0.0.1:8000/skills/', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        if (!availableSkillsResponse.ok) {
-          const errorData = await availableSkillsResponse.json();
-          throw new Error(typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
-        }
-        const availableSkillsData = await availableSkillsResponse.json();
-        
-        if (isMounted) {
           setAvailableSkills(availableSkillsData);
-        }
+          
+          // Update skill states
+          const hasTeachingSkills = teachingSkills.length > 0;
+          const hasLearningSkills = learningSkills.length > 0;
+          setHasSkills(hasTeachingSkills || hasLearningSkills);
+          setHasRequiredSkills(hasTeachingSkills && hasLearningSkills);
 
+          // Add a small delay before hiding the loader for smoother transition
+          setTimeout(() => {
+            if (isMounted) {
+              setProfileLoading(false);
+            }
+          }, 1000);
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
         if (isMounted) {
-          // Handle error state
           setUserProfile(prev => ({
             ...prev,
             error: error.message
           }));
+          setProfileLoading(false);
         }
       }
     };
@@ -248,7 +313,7 @@ function ProfilePage() {
     return () => {
       isMounted = false;
     };
-  }, []); // Empty dependency array since we only want to fetch once on mount
+  }, []);
 
   // Add debounced search function
   useEffect(() => {
@@ -277,6 +342,14 @@ function ProfilePage() {
     return () => clearTimeout(timeoutId);
   }, [searchQuery]); // Only depend on searchQuery
 
+  // Update the useEffect that checks for skills
+  useEffect(() => {
+    const hasTeachingSkills = userProfile.teachingSkills.length > 0;
+    const hasLearningSkills = userProfile.learningInterests.length > 0;
+    setHasSkills(hasTeachingSkills || hasLearningSkills); // For general UI warnings
+    setHasRequiredSkills(hasTeachingSkills && hasLearningSkills); // For matches specifically
+  }, [userProfile.teachingSkills, userProfile.learningInterests]);
+
   // Optimize handleAddSkill to handle both existing and new skills with optimistic updates
   const handleAddSkill = async (skillId, newSkillName = null) => {
     try {
@@ -297,14 +370,17 @@ function ProfilePage() {
       }
 
       // Optimistically update the UI
+      const updatedTeachingSkills = newSkillType === 'teach' 
+        ? [...userProfile.teachingSkills, skillName]
+        : userProfile.teachingSkills;
+      const updatedLearningSkills = newSkillType === 'learn'
+        ? [...userProfile.learningInterests, skillName]
+        : userProfile.learningInterests;
+
       setUserProfile(prev => ({
         ...prev,
-        teachingSkills: newSkillType === 'teach' 
-          ? [...prev.teachingSkills, skillName]
-          : prev.teachingSkills,
-        learningInterests: newSkillType === 'learn'
-          ? [...prev.learningInterests, skillName]
-          : prev.learningInterests
+        teachingSkills: updatedTeachingSkills,
+        learningInterests: updatedLearningSkills
       }));
 
       // If no skillId is provided, create a new skill
@@ -322,12 +398,8 @@ function ProfilePage() {
           // Revert the optimistic update
           setUserProfile(prev => ({
             ...prev,
-            teachingSkills: newSkillType === 'teach'
-              ? prev.teachingSkills.filter(s => s !== skillName)
-              : prev.teachingSkills,
-            learningInterests: newSkillType === 'learn'
-              ? prev.learningInterests.filter(s => s !== skillName)
-              : prev.learningInterests
+            teachingSkills: updatedTeachingSkills.filter(s => s !== skillName),
+            learningInterests: updatedLearningSkills.filter(s => s !== skillName)
           }));
           const errorData = await createResponse.json();
           throw new Error(errorData.detail || 'Failed to create skill');
@@ -353,12 +425,8 @@ function ProfilePage() {
         // Revert the optimistic update
         setUserProfile(prev => ({
           ...prev,
-          teachingSkills: newSkillType === 'teach'
-            ? prev.teachingSkills.filter(s => s !== skillName)
-            : prev.teachingSkills,
-          learningInterests: newSkillType === 'learn'
-            ? prev.learningInterests.filter(s => s !== skillName)
-            : prev.learningInterests
+          teachingSkills: updatedTeachingSkills.filter(s => s !== skillName),
+          learningInterests: updatedLearningSkills.filter(s => s !== skillName)
         }));
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to add skill');
@@ -368,6 +436,7 @@ function ProfilePage() {
       setSearchQuery('');
       setSearchResults([]);
 
+      // Skills state will be automatically updated by the useEffect above
     } catch (error) {
       console.error('Error adding skill:', error);
       // Show error message to user
@@ -380,14 +449,17 @@ function ProfilePage() {
       const token = localStorage.getItem('token');
 
       // Optimistically update the UI
+      const updatedTeachingSkills = type === 'teach'
+        ? userProfile.teachingSkills.filter(s => s !== skillName)
+        : userProfile.teachingSkills;
+      const updatedLearningSkills = type === 'learn'
+        ? userProfile.learningInterests.filter(s => s !== skillName)
+        : userProfile.learningInterests;
+
       setUserProfile(prev => ({
         ...prev,
-        teachingSkills: type === 'teach'
-          ? prev.teachingSkills.filter(s => s !== skillName)
-          : prev.teachingSkills,
-        learningInterests: type === 'learn'
-          ? prev.learningInterests.filter(s => s !== skillName)
-          : prev.learningInterests
+        teachingSkills: updatedTeachingSkills,
+        learningInterests: updatedLearningSkills
       }));
 
       // First, get the user's skills to find the correct user_skill entry
@@ -402,12 +474,8 @@ function ProfilePage() {
         // Revert the optimistic update
         setUserProfile(prev => ({
           ...prev,
-          teachingSkills: type === 'teach'
-            ? [...prev.teachingSkills, skillName]
-            : prev.teachingSkills,
-          learningInterests: type === 'learn'
-            ? [...prev.learningInterests, skillName]
-            : prev.learningInterests
+          teachingSkills: updatedTeachingSkills,
+          learningInterests: updatedLearningSkills
         }));
         const errorData = await skillsResponse.json();
         throw new Error(errorData.detail || 'Failed to fetch user skills');
@@ -423,12 +491,8 @@ function ProfilePage() {
         // Revert the optimistic update
         setUserProfile(prev => ({
           ...prev,
-          teachingSkills: type === 'teach'
-            ? [...prev.teachingSkills, skillName]
-            : prev.teachingSkills,
-          learningInterests: type === 'learn'
-            ? [...prev.learningInterests, skillName]
-            : prev.learningInterests
+          teachingSkills: updatedTeachingSkills,
+          learningInterests: updatedLearningSkills
         }));
         throw new Error('Skill not found in user skills');
       }
@@ -449,17 +513,14 @@ function ProfilePage() {
         // Revert the optimistic update
         setUserProfile(prev => ({
           ...prev,
-          teachingSkills: type === 'teach'
-            ? [...prev.teachingSkills, skillName]
-            : prev.teachingSkills,
-          learningInterests: type === 'learn'
-            ? [...prev.learningInterests, skillName]
-            : prev.learningInterests
+          teachingSkills: updatedTeachingSkills,
+          learningInterests: updatedLearningSkills
         }));
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to remove skill');
       }
 
+      // Skills state will be automatically updated by the useEffect above
     } catch (error) {
       console.error('Error removing skill:', error);
       // Show error message to user
@@ -505,14 +566,14 @@ function ProfilePage() {
   const ProfileSection = () => (
     <div className="profile-content">
       <div className="profile-header">
-        <h2>My Profile</h2>
+        <h2 className="section-title text-center mb-4">My Profile</h2>
       </div>
       <div className="profile-details">
         <div className="user-info">
           <h3>{userProfile.username}</h3>
           <p>{userProfile.email}</p>
         </div>
-        <div className="skills-container">
+        <div className="profile-skills-container">
           <div className="skills-section">
             <h4>Skills I Can Teach</h4>
             <div className="skills-list">
@@ -520,7 +581,7 @@ function ProfilePage() {
                 <div key={index} className="skill-tag">
                   {skill}
                   <button 
-                    className="btn btn-sm btn-outline-danger ml-2"
+                    className="btn-remove"
                     onClick={() => handleRemoveSkill(skill, 'teach')}
                   >
                     ×
@@ -545,7 +606,7 @@ function ProfilePage() {
                 <div key={index} className="skill-tag">
                   {skill}
                   <button 
-                    className="btn btn-sm btn-outline-danger ml-2"
+                    className="btn-remove"
                     onClick={() => handleRemoveSkill(skill, 'learn')}
                   >
                     ×
@@ -584,93 +645,260 @@ function ProfilePage() {
 
   // Matches Section
   const MatchesSection = () => {
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [matches, setMatches] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
+    const [cachedMatches, setCachedMatches] = useState(() => {
+      const savedMatches = localStorage.getItem("cachedMatches");
+      return savedMatches ? JSON.parse(savedMatches) : null;
+    });
+    const [lastSkills, setLastSkills] = useState(() => localStorage.getItem("lastSkills") || null);
+    const [skillsValidated, setSkillsValidated] = useState(false);
 
+    // First useEffect to validate skills
     useEffect(() => {
-      const fetchMatches = async () => {
+      let isMounted = true;
+
+      const validateSkills = async () => {
         try {
-          const token = localStorage.getItem("token");
-          const response = await fetch("http://127.0.0.1:8000/matches/", {
-            method: "GET",
+          const token = localStorage.getItem('token');
+          if (!token) {
+            throw new Error('No token found');
+          }
+
+          // Fetch user's skills to validate
+          const skillsResponse = await fetch(`http://127.0.0.1:8000/users/${userProfile.user_id}/skills/`, {
+            method: 'GET',
             headers: {
-              "Authorization": `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          });
+
+          if (!skillsResponse.ok) {
+            throw new Error('Failed to validate skills');
+          }
+
+          const skillsData = await skillsResponse.json();
+          const currentSkills = JSON.stringify(skillsData); // Convert to string for comparison
+          
+          if (isMounted) {
+            // Update the hasRequiredSkills state based on the fresh data
+            const hasTeachingSkills = skillsData.teaching.length > 0;
+            const hasLearningSkills = skillsData.learning.length > 0;
+            setHasRequiredSkills(hasTeachingSkills && hasLearningSkills);
+            setSkillsValidated(true);
+            
+            // If skills haven't changed and we have cached matches, use them
+            if (lastSkills === currentSkills && cachedMatches) {
+              setMatches(cachedMatches);
+              setIsLoading(false);
+              return;
+            }
+
+            // Update last known skills state
+            setLastSkills(currentSkills);
+            localStorage.setItem("lastSkills", currentSkills);
+            
+            // Only stop loading if we're not going to fetch matches
+            if (!(hasTeachingSkills && hasLearningSkills)) {
+              setIsLoading(false);
+            }
+          }
+        } catch (error) {
+          if (isMounted) {
+            setError(error.message);
+            setHasRequiredSkills(false);
+            setSkillsValidated(true);
+            setIsLoading(false);
+          }
+        }
+      };
+
+      validateSkills();
+
+      return () => {
+        isMounted = false;
+      };
+    }, [userProfile.user_id, lastSkills, cachedMatches]);
+
+    // Second useEffect to fetch matches only after skills are validated
+    useEffect(() => {
+      let isMounted = true;
+
+      const fetchMatches = async () => {
+        // Only proceed if skills are validated, required, and either no cache or skills changed
+        if (!skillsValidated || !hasRequiredSkills || (lastSkills && cachedMatches)) {
+          if (skillsValidated) {
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) {
+            throw new Error('No token found');
+          }
+
+          const response = await fetch('http://127.0.0.1:8000/matches/', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
           });
 
           if (!response.ok) {
-            throw new Error("Failed to fetch matches");
+            throw new Error('Failed to fetch matches');
           }
 
           const data = await response.json();
-          setMatches(data);
-        } catch (err) {
-          setError(err.message);
+          if (isMounted) {
+            setMatches(data || []);
+            setCachedMatches(data || []); // Cache the matches
+            localStorage.setItem("cachedMatches", JSON.stringify(data || []));
+          }
+        } catch (error) {
+          if (isMounted) {
+            setError(error.message);
+            setMatches([]);
+            setCachedMatches(null);
+            localStorage.removeItem("cachedMatches");
+          }
         } finally {
-          setLoading(false);
+          if (isMounted) {
+            setIsLoading(false);
+          }
         }
       };
 
       fetchMatches();
-    }, []);
 
-    if (loading) return <div className="loading">Loading matches...</div>;
-    if (error) return <div className="error">Error: {error}</div>;
-    if (matches.length === 0) return <div className="no-matches">No matches found.</div>;
+      return () => {
+        isMounted = false;
+      };
+    }, [skillsValidated, hasRequiredSkills, lastSkills]);
 
-    return (
-      <div className="matches-content">
-        <h2>Potential Matches</h2>
-        <div className="matches-grid">
-          {matches.map((match) => (
-            <div key={match.match_id} className="match-card">
-              <div className="match-info">
-                <h3>{match.username}</h3>
-                <div className="skills-section">
-                  <div className="teaching-skills">
-                    <h4>Teaches:</h4>
-                    <ul>
-                      {match.teaching.map((skill, index) => (
-                        <li key={index}>{skill}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="learning-skills">
-                    <h4>Wants to Learn:</h4>
-                    <ul>
-                      {match.learning.map((skill, index) => (
-                        <li key={index}>{skill}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-                <div className="rating">
-                  <span>Rating: {match.rating.toFixed(1)} ⭐</span>
-                </div>
-              </div>
-              <div className="match-actions">
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => startChat(match)}
-                >
-                  Start Chat
-                </button>
-              </div>
+    // Show loading state while validating skills or fetching matches
+    if (isLoading) {
+      return (
+        <div className="section matches-section">
+          <h2 className="section-title text-center mb-4">Potential Matches</h2>
+          <div className="matches-loading-wrapper">
+            <div className="matches-loading-container">
+              <div className="loading-spinner"></div>
+              <span className="loading-text">Loading Matches...</span>
             </div>
-          ))}
+          </div>
         </div>
+      );
+    }
+
+    // Only show the warning after skills have been validated
+    if (skillsValidated && !hasRequiredSkills) {
+      return (
+        <div className="section matches-section">
+          <h2 className="section-title text-center mb-4">Potential Matches</h2>
+          <div className="alert alert-warning text-center">
+            <p className="mb-3">
+              {!userProfile.teachingSkills.length && !userProfile.learningInterests.length
+                ? "You haven't added any skills yet."
+                : !userProfile.teachingSkills.length
+                ? "Please add at least one skill you can teach."
+                : "Please add at least one skill you want to learn."}
+            </p>
+            <p className="mb-3">You need both teaching and learning skills to find matches!</p>
+            <button 
+              className="btn btn-primary" 
+              onClick={() => setActiveSection('profile')}
+            >
+              Go to Profile
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Show error state
+    if (error) {
+      return (
+        <div className="section matches-section">
+          <h2 className="section-title text-center mb-4">Potential Matches</h2>
+          <div className="alert alert-danger text-center">
+            Error loading matches: {error}
+          </div>
+        </div>
+      );
+    }
+
+    // Rest of the existing return statement for showing matches...
+    return (
+      <div className="section matches-section">
+        <h2 className="section-title text-center mb-4">Potential Matches</h2>
+        {Array.isArray(matches) && matches.length > 0 ? (
+          <div className="matches-grid">
+            {matches.map((match, index) => (
+              <div key={match.user_id || index} className="match-card">
+                <div className="match-header">
+                  <h3>{match.username}</h3>
+                  <div className="rating">
+                    <span className="rating-number">{(match.rating || 0).toFixed(1)}</span>
+                    <span className="star gold-star">⭐</span>
+                  </div>
+                </div>
+                <div className="match-skills">
+                  <div className="skill-section">
+                    <p className="skill-label">Can Teach:</p>
+                    <div className="skill-box">
+                      {Array.isArray(match.teaching) && match.teaching.length > 0 ? (
+                        match.teaching.map((skill, idx) => (
+                          <span key={`${match.user_id}-teach-${idx}`} className="skill-tag">
+                            {skill}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-muted">No teaching skills listed</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="skill-section">
+                    <p className="skill-label">Wants to Learn:</p>
+                    <div className="skill-box">
+                      {Array.isArray(match.learning) && match.learning.length > 0 ? (
+                        match.learning.map((skill, idx) => (
+                          <span key={`${match.user_id}-learn-${idx}`} className="skill-tag">
+                            {skill}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-muted">No learning interests listed</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="match-actions">
+                  <button className="btn btn-primary">Start Chat</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="alert alert-info text-center">
+            No matches found yet. Try adding more skills to increase your chances of finding a match!
+          </div>
+        )}
       </div>
     );
   };
 
   // Chats Section
   const ChatsSection = () => (
-    <div className="chats-content">
-      <div className="chats-header">
-        <h2>Messages</h2>
-      </div>
+    <div className="section chats-section">
+      {!hasSkills && <NoSkillsWarning onNavigateToProfile={() => setActiveSection('profile')} />}
+      <h2>Chats</h2>
       {selectedChat ? (
         <div className="chat-container">
           <div className="chat-header">
@@ -703,6 +931,11 @@ function ProfilePage() {
       )}
     </div>
   );
+
+  // Show loading screen while fetching initial data
+  if (profileLoading) {
+    return <FullPageLoader />;
+  }
 
   return (
     <div className="profile-page">
@@ -749,7 +982,7 @@ function ProfilePage() {
         </div>
         <div className="nav-right">
           <button 
-            className="btn btn-outline-danger"
+            className="logout-btn"
             onClick={handleLogout}
           >
             Log Out
@@ -847,91 +1080,129 @@ style.textContent = `
 
   .match-card {
     background: white;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 1.5rem;
-    margin-bottom: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
   }
 
-  .match-info {
-    flex: 1;
+  .match-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
 
   .match-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
   }
 
-  .match-header h4 {
+  .match-header h3 {
     margin: 0;
-    margin-right: 1rem;
+    color: #212529;
   }
 
   .rating {
     display: flex;
     align-items: center;
-    color: #ffc107;
+    gap: 4px;
+  }
+
+  .star {
+    font-size: 1rem;
   }
 
   .rating-number {
-    margin-left: 0.5rem;
     color: #6c757d;
-  }
-
-  .skills-exchange {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .skill-item {
-    display: flex;
-    align-items: center;
-  }
-
-  .skill-label {
-    color: #6c757d;
-    width: 120px;
     font-size: 0.9rem;
+    margin-left: 4px;
   }
 
-  .skill-value {
-    font-weight: 500;
-  }
-
-  .match-actions {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 1rem;
-  }
-
-  .match-score {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .score-label {
-    font-size: 0.8rem;
-    color: #6c757d;
-  }
-
-  .score-value {
-    font-size: 1.2rem;
-    font-weight: bold;
-    color: #28a745;
-  }
-
-  .skills-container {
+  .match-card .skills-section {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 2rem;
-    margin-top: 2rem;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .match-card .teaching-skills,
+  .match-card .learning-interests {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+  }
+
+  .match-card h4 {
+    color: #495057;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+  }
+
+  .match-card ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .match-card .skill-item {
+    background: white;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: #495057;
+    border: 1px solid #dee2e6;
+  }
+
+  .match-card .match-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1rem;
+  }
+
+  .matches-grid {
+    display: grid;
+    gap: 1.5rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 768px) {
+    .match-card .skills-section {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .loading-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 2rem;
+  }
+
+  .loading-spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .loading-text {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: #6c757d;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 
   .chat-container {
@@ -1011,6 +1282,231 @@ style.textContent = `
   .user-info p {
     margin: 0.5rem 0 0;
     color: #6c757d;
+  }
+
+  .section-title {
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.8rem;
+    margin-bottom: 20px;
+    color: #2c3e50;
+  }
+
+  .gold-star {
+    color: #ffd700;
+    font-size: 1.2rem;
+    margin-left: 5px;
+  }
+
+  .rating {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .rating-number {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #2c3e50;
+  }
+
+  .match-skills {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+
+  .skill-section {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+  }
+
+  .skill-label {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #2c3e50;
+  }
+
+  .skill-box {
+    background: white;
+    padding: 10px;
+    border-radius: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .skill-tag {
+    background: #e9ecef;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.9rem;
+    color: #495057;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-remove {
+    background: none;
+    border: none;
+    color: #dc3545;
+    font-size: 1.2rem;
+    padding: 0 4px;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .btn-remove:hover {
+    color: #c82333;
+  }
+
+  .profile-skills-container {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2rem;
+  }
+
+  .profile-skills-container .skills-section {
+    flex: 1;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .profile-skills-container h4 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+  }
+
+  .logout-btn {
+    background: #dc3545;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+
+  .logout-btn:hover {
+    background: #c82333;
+  }
+
+  @media (max-width: 768px) {
+    .profile-skills-container {
+      flex-direction: column;
+    }
+
+    .profile-skills-container .skills-section {
+      width: 100%;
+    }
+  }
+
+  .full-page-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+  }
+
+  .loader-content {
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .loading-title {
+    color: #2c3e50;
+    font-size: 2rem;
+    margin: 1.5rem 0 1rem;
+    font-weight: bold;
+  }
+
+  .loading-subtitle {
+    color: #6c757d;
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+    font-weight: normal;
+  }
+
+  .loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+  }
+
+  .matches-loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    padding: 2rem;
+  }
+
+  .matches-loading-container .loading-spinner {
+    margin-bottom: 1rem;
+  }
+
+  .matches-loading-container .loading-text {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: #6c757d;
+    text-align: center;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .matches-loading-wrapper {
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .matches-loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .matches-loading-container .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1.5rem;
+  }
+
+  .matches-loading-container .loading-text {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: #6c757d;
+    display: block;
+    text-align: center;
   }
 `;
 document.head.appendChild(style);
