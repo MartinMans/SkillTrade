@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -25,6 +25,8 @@ class User(Base):
     chat_messages = relationship("Chat", back_populates="sender")
     fraud_flags = relationship("FraudFlag", back_populates="user")
     trade_history = relationship("TradeHistory", back_populates="user")
+    matches_as_user1 = relationship("Match", foreign_keys="Match.user1_id", back_populates="user1")
+    matches_as_user2 = relationship("Match", foreign_keys="Match.user2_id", back_populates="user2")
 
 class Skill(Base):
     __tablename__ = "skills"
@@ -118,3 +120,25 @@ class TradeHistory(Base):
     # Relationships
     user = relationship("User", back_populates="trade_history")
     trade = relationship("Trade", back_populates="trade_history")
+
+class MatchStatus(enum.Enum):
+    PENDING = "pending"
+    COMMITTED = "committed"
+    COMPLETED = "completed"
+    FLAGGED = "flagged"
+
+class Match(Base):
+    __tablename__ = "matches"
+
+    match_id = Column(Integer, primary_key=True, index=True)
+    user1_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user2_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    match_status = Column(Enum(MatchStatus), default=MatchStatus.PENDING, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Ensure unique pairs
+    __table_args__ = (UniqueConstraint("user1_id", "user2_id", name="unique_match"),)
+
+    # Relationships
+    user1 = relationship("User", foreign_keys=[user1_id], back_populates="matches_as_user1")
+    user2 = relationship("User", foreign_keys=[user2_id], back_populates="matches_as_user2")

@@ -1,8 +1,8 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy import or_, and_
 from . import models, schemas
 from passlib.context import CryptContext
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -115,3 +115,75 @@ def get_user_skill(db: Session, user_id: int, skill_id: int) -> Optional[models.
         models.UserSkill.user_id == user_id,
         models.UserSkill.skill_id == skill_id
     ).first()
+
+def find_potential_matches(db: Session, user_id: int) -> List[Dict[str, Any]]:
+    """Find potential skill trade matches for a user based on strict skill swapping."""
+    
+    # Get the user's teaching & learning skills
+    user = db.query(models.User).filter(models.User.user_id == user_id).first()
+    if not user:
+        return []
+
+    # Get user's teaching and learning skills
+    teaching_skills, learning_skills = get_user_skills(db, user_id)
+    teaching_skill_ids = [skill.skill_id for skill in teaching_skills]
+    learning_skill_ids = [skill.skill_id for skill in learning_skills]
+
+    # Create aliases for UserSkill to avoid join conflicts
+    teach_alias = aliased(models.UserSkill)
+    learn_alias = aliased(models.UserSkill)
+
+    # Find potential matches with proper table aliasing
+    potential_matches = (
+        db.query(models.User)
+        .join(teach_alias, teach_alias.user_id == models.User.user_id)
+        .filter(
+            teach_alias.skill_id.in_(learning_skill_ids),
+            teach_alias.type == schemas.SkillType.TEACH
+        )
+        .join(learn_alias, learn_alias.user_id == models.User.user_id)
+        .filter(
+            learn_alias.skill_id.in_(teaching_skill_ids),
+            learn_alias.type == schemas.SkillType.LEARN
+        )
+        .filter(models.User.user_id != user_id)
+        .distinct()
+        .all()
+    )
+
+    matches = []
+    for match in potential_matches:
+        # Ensure the match does not already exist
+        existing_match = db.query(models.Match).filter(
+            or_(
+                and_(models.Match.user1_id == user_id, models.Match.user2_id == match.user_id),
+                and_(models.Match.user1_id == match.user_id, models.Match.user2_id == user_id)
+            )
+        ).first()
+
+        if not existing_match:
+            new_match = models.Match(
+                user1_id=user_id,
+                user2_id=match.user_id,
+                match_status=models.MatchStatus.PENDING
+            )
+            db.add(new_match)
+            db.commit()
+            db.refresh(new_match)
+        else:
+            new_match = existing_match
+
+        # Get match's teaching and learning skills
+        match_teaching, match_learning = get_user_skills(db, match.user_id)
+        
+        matches.append({
+            "match_id": new_match.match_id,
+            "user_id": match.user_id,
+            "username": match.username,
+            "teaching": [skill.skill_name for skill in match_teaching],
+            "learning": [skill.skill_name for skill in match_learning],
+            "rating": match.rating,
+            "match_status": new_match.match_status
+        })
+
+    return matches
