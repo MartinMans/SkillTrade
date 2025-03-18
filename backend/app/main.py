@@ -20,9 +20,9 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5500", "http://127.0.0.1:5501"],  # Allow requests from both frontend ports
+    allow_origins=["*"],  # Allow all origins (or restrict to ["http://127.0.0.1:5500"])
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
+    allow_methods=["*"],  # Allow all methods (GET, POST, DELETE, etc.)
     allow_headers=["*"],  # Allow all headers
 )
 
@@ -172,3 +172,15 @@ async def remove_user_skill(
 async def read_current_user(current_user: models.User = Depends(get_current_user)):
     """Get the current user's profile."""
     return current_user
+
+@app.get("/matches/", response_model=List[schemas.MatchResult], tags=["Matching"])
+async def get_potential_matches(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve potential skill trade matches for the current user.
+    Returns a list of users who have matching skills for trading.
+    """
+    matches = crud.find_potential_matches(db, current_user.user_id)
+    return matches

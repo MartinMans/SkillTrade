@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from enum import Enum
+from .models import MatchStatus
 
 class UserBase(BaseModel):
     username: str
@@ -57,3 +58,15 @@ class UserSkillOut(UserSkillBase):
 class UserSkillsResponse(BaseModel):
     teaching: List[SkillOut]
     learning: List[SkillOut]
+
+class MatchResult(BaseModel):
+    match_id: int
+    user_id: int
+    username: str
+    teaching: List[str]
+    learning: List[str]
+    rating: float
+    match_status: MatchStatus
+
+    class Config:
+        from_attributes = True

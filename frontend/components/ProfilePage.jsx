@@ -583,54 +583,87 @@ function ProfilePage() {
   );
 
   // Matches Section
-  const MatchesSection = () => (
-    <div className="matches-content">
-      <div className="matches-header">
+  const MatchesSection = () => {
+    const [matches, setMatches] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+      const fetchMatches = async () => {
+        try {
+          const token = localStorage.getItem("token");
+          const response = await fetch("http://127.0.0.1:8000/matches/", {
+            method: "GET",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to fetch matches");
+          }
+
+          const data = await response.json();
+          setMatches(data);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchMatches();
+    }, []);
+
+    if (loading) return <div className="loading">Loading matches...</div>;
+    if (error) return <div className="error">Error: {error}</div>;
+    if (matches.length === 0) return <div className="no-matches">No matches found.</div>;
+
+    return (
+      <div className="matches-content">
         <h2>Potential Matches</h2>
-        <p className="text-muted">People who match your learning interests</p>
-      </div>
-      <div className="matches-list">
-        {skillMatches.map(match => (
-          <div key={match.id} className="match-card">
-            <div className="match-info">
-              <div className="match-header">
-                <h4>{match.username}</h4>
+        <div className="matches-grid">
+          {matches.map((match) => (
+            <div key={match.match_id} className="match-card">
+              <div className="match-info">
+                <h3>{match.username}</h3>
+                <div className="skills-section">
+                  <div className="teaching-skills">
+                    <h4>Teaches:</h4>
+                    <ul>
+                      {match.teaching.map((skill, index) => (
+                        <li key={index}>{skill}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="learning-skills">
+                    <h4>Wants to Learn:</h4>
+                    <ul>
+                      {match.learning.map((skill, index) => (
+                        <li key={index}>{skill}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
                 <div className="rating">
-                  <span className="stars">{'★'.repeat(Math.floor(match.rating))}</span>
-                  <span className="rating-number">{match.rating}</span>
+                  <span>Rating: {match.rating.toFixed(1)} ⭐</span>
                 </div>
               </div>
-              <div className="skills-exchange">
-                <div className="skill-item">
-                  <span className="skill-label">Can teach you:</span>
-                  <span className="skill-value">{match.canTeach}</span>
-                </div>
-                <div className="skill-item">
-                  <span className="skill-label">Wants to learn:</span>
-                  <span className="skill-value">{match.wantsToLearn}</span>
-                </div>
+              <div className="match-actions">
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => startChat(match)}
+                >
+                  Start Chat
+                </button>
               </div>
             </div>
-            <div className="match-actions">
-              <div className="match-score">
-                <span className="score-label">Match</span>
-                <span className="score-value">{match.matchScore}%</span>
-              </div>
-              <button 
-                className="btn btn-primary"
-                onClick={() => {
-                  setSelectedChat(match);
-                  setActiveSection('chats');
-                }}
-              >
-                Start Chat
-              </button>
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // Chats Section
   const ChatsSection = () => (
