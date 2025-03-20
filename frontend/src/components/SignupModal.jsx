@@ -1,5 +1,6 @@
-// Modal component for Sign Up / Log In functionality.
-const { useState } = React;
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import ProfilePage from './ProfilePage';
 
 function SignupModal({ show, onClose }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -11,6 +12,7 @@ function SignupModal({ show, onClose }) {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const navigate = useNavigate();
 
   if (!show) return null;
 
@@ -45,6 +47,7 @@ function SignupModal({ show, onClose }) {
 
     try {
       const endpoint = isLogin ? '/login' : '/users/';
+      console.log('Making request to:', `${import.meta.env.VITE_API_BASE_URL}${endpoint}`);
       
       // For login, use application/x-www-form-urlencoded format
       const loginBody = isLogin 
@@ -58,21 +61,35 @@ function SignupModal({ show, onClose }) {
             password: formData.password
           });
 
+      console.log('Request body:', loginBody.toString());
+
       const headers = isLogin 
         ? { 'Content-Type': 'application/x-www-form-urlencoded' }
         : { 'Content-Type': 'application/json' };
 
-      const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
+      console.log('Request headers:', headers);
+
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: headers,
         body: loginBody,
       });
 
-      const data = await response.json();
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      // Check if response is empty
+      const contentType = response.headers.get('content-type');
+      let data;
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        throw new Error('Invalid response format from server');
+      }
 
       if (!response.ok) {
         // Handle specific error messages from the backend
-        const errorMessage = data.detail || 'Authentication failed';
+        const errorMessage = data?.detail || 'Authentication failed';
         throw new Error(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
       }
 
@@ -87,9 +104,7 @@ function SignupModal({ show, onClose }) {
         // Close modal and redirect to profile page
         setTimeout(() => {
           onClose();
-          // Replace the current view with the profile page
-          const root = document.getElementById('root');
-          ReactDOM.render(React.createElement(ProfilePage), root);
+          navigate('/profile');
         }, 1500);
       } else {
         setSuccess('Account created successfully! Please log in.');
@@ -107,76 +122,78 @@ function SignupModal({ show, onClose }) {
     <div className="modal d-block" tabIndex="-1" role="dialog">
       <div className="modal-dialog modal-dialog-centered" role="document">
         <div className="modal-content">
-          <div className="modal-header">
-            <h5 className="modal-title">{isLogin ? 'Log In' : 'Sign Up'}</h5>
-            <button type="button" className="close" onClick={onClose} aria-label="Close">
-              <span aria-hidden="true">&times;</span>
-            </button>
+          <div className="modal-header border-0">
+            <h5 className="modal-title fw-bold">{isLogin ? 'Log In' : 'Sign Up'}</h5>
+            <button type="button" className="btn-close" onClick={onClose} aria-label="Close"></button>
           </div>
-          <div className="modal-body">
-            <form onSubmit={handleSubmit}>
+          <div className="modal-body px-5">
+            <form onSubmit={handleSubmit} className="auth-form">
               {!isLogin && (
-                <div className="form-group">
-                  <label htmlFor="username">Username</label>
+                <div className="mb-3">
+                  <label htmlFor="username" className="form-label">Username</label>
                   <input
                     type="text"
-                    className="form-control"
+                    className="form-control form-control-lg"
                     id="username"
                     name="username"
                     value={formData.username}
                     onChange={handleInputChange}
                     required
+                    placeholder="Enter your username"
                   />
                 </div>
               )}
-              <div className="form-group">
-                <label htmlFor="email">Email</label>
+              <div className="mb-3">
+                <label htmlFor="email" className="form-label">Email</label>
                 <input
                   type="email"
-                  className="form-control"
+                  className="form-control form-control-lg"
                   id="email"
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
                   required
+                  placeholder="Enter your email"
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="password">Password</label>
+              <div className="mb-3">
+                <label htmlFor="password" className="form-label">Password</label>
                 <input
                   type="password"
-                  className="form-control"
+                  className="form-control form-control-lg"
                   id="password"
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
                   required
+                  placeholder="Enter your password"
                 />
               </div>
               {!isLogin && (
-                <div className="form-group">
-                  <label htmlFor="confirmPassword">Confirm Password</label>
+                <div className="mb-3">
+                  <label htmlFor="confirmPassword" className="form-label">Confirm Password</label>
                   <input
                     type="password"
-                    className="form-control"
+                    className="form-control form-control-lg"
                     id="confirmPassword"
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
                     required
+                    placeholder="Confirm your password"
                   />
                 </div>
               )}
-              {error && <div className="alert alert-danger">{error}</div>}
-              {success && <div className="alert alert-success">{success}</div>}
-              <button type="submit" className="btn btn-primary btn-block">
+              {error && <div className="alert alert-danger mt-3">{error}</div>}
+              {success && <div className="alert alert-success mt-3">{success}</div>}
+              <button type="submit" className="btn btn-primary w-100 mt-3">
                 {isLogin ? 'Log In' : 'Sign Up'}
               </button>
             </form>
-            <div className="text-center mt-3">
+            <div className="text-center mt-4">
               <button
                 type="button"
-                className="btn btn-link"
+                className="btn btn-link text-decoration-none"
                 onClick={() => {
                   setIsLogin(!isLogin);
                   resetForm();
@@ -192,7 +209,4 @@ function SignupModal({ show, onClose }) {
   );
 }
 
-// Make the component available globally
-window.SignupModal = SignupModal;
-console.log('SignupModal component loaded');
-window.markComponentLoaded(); 
+export default SignupModal; 

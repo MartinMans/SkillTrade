@@ -1,116 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <!-- Set character encoding and page title -->
-    <meta charset="utf-8" />
-    <title>SkillTrade</title>
-    <!-- Favicon (using .webp format) -->
-    <link rel="icon" type="image/webp" href="./assets/favicon.webp" />
-    <!-- Bootstrap CSS for layout and components -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" />
-    <!-- Google Font for typography -->
-    <link href="https://fonts.googleapis.com/css2?family=Lora:ital@1&display=swap" rel="stylesheet" />
-    <!-- Custom Styles -->
-    <link rel="stylesheet" href="./styles/styles.css" />
-    <style>
-      #loading {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: white;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-size: 1.5rem;
-        z-index: 9999;
-      }
-      .loading-spinner {
-        width: 50px;
-        height: 50px;
-        border: 5px solid #f3f3f3;
-        border-top: 5px solid #3498db;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin-right: 15px;
-      }
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-    </style>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React</title>
   </head>
   <body>
-    <!-- Loading indicator -->
-    <div id="loading">
-      <div class="loading-spinner"></div>
-      <span>Loading SkillTrade...</span>
-    </div>
-
-    <!-- Root element where React will mount the app -->
     <div id="root"></div>
-    
-    <!-- React and ReactDOM libraries -->
-    <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
-    <!-- Babel for in-browser JSX transformation -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Bootstrap JS dependencies -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.6.2/js/bootstrap.min.js"></script>
-
-    <!-- Initialize the app -->
-    <script type="text/babel">
-      // Track component loading status
-      let componentsLoaded = 0;
-      const REQUIRED_COMPONENTS = 5; // NavBar, HeroSection, SignupModal, HomePage, ProfilePage
-
-      // Function to check if all components are loaded and initialize if ready
-      function checkAndInitialize() {
-        if (componentsLoaded === REQUIRED_COMPONENTS) {
-          console.log('All components loaded, starting initialization...');
-          initApp();
-        }
-      }
-
-      // Function to mark a component as loaded
-      window.markComponentLoaded = () => {
-        componentsLoaded++;
-        console.log(`Component loaded (${componentsLoaded}/${REQUIRED_COMPONENTS})`);
-        checkAndInitialize();
-      };
-
-      // Initialize the app
-      async function initApp() {
-        try {
-          console.log('Initializing app...');
-          const root = document.getElementById('root');
-          const loadingElement = document.getElementById('loading');
-          
-          if (root) {
-            console.log('Root element found, rendering HomePage...');
-            ReactDOM.render(React.createElement(window.HomePage), root);
-            
-            if (loadingElement) {
-              loadingElement.style.display = 'none';
-            }
-          } else {
-            console.error('Root element not found');
-          }
-        } catch (error) {
-          console.error('Error initializing app:', error);
-        }
-      }
-    </script>
-
-    <!-- Load components -->
-    <script type="text/babel" src="./components/NavBar.jsx"></script>
-    <script type="text/babel" src="./components/HeroSection.jsx"></script>
-    <script type="text/babel" src="./components/SignupModal.jsx"></script>
-    <script type="text/babel" src="./components/ProfilePage.jsx"></script>
-    <script type="text/babel" src="./components/HomePage.jsx"></script>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
