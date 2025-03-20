@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 node_modules
+
+# Ignore virtual environments
+backend/venv/
+.venv/
+pyvenv.cfg
