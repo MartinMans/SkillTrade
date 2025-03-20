@@ -49,7 +49,7 @@ npm install
 #### **Backend Setup (FastAPI)**
 ```bash
 cd backend
-python -m venv venv  # Create a virtual environment
+python -m venv venv  # Create a virtual environment # You may not need to run this and can directly skip to the next step.
 source venv/bin/activate  # On macOS/Linux
 # OR
 venv\Scripts\activate  # On Windows
@@ -68,7 +68,7 @@ python reset_db.py  # Resets the database
 
 Run the FastAPI backend:
 ```bash
-uvicorn main:app --reload
+uvicorn app.main:app --reload # Note: Our main file is within app, hence: app.main
 ```
 
 The API will be available at: [http://127.0.0.1:8000](http://127.0.0.1:8000)  
