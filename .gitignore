@@ -56,7 +56,15 @@ lerna-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
+frontend/.env
+
+# Keep environment templates
+!.env.example
+!frontend/.env.example
+!backend/.env.example
 
 # Database
 *.db
 *.sqlite3
+backend/data/*.db
+!backend/data/.gitkeep

@@ -31,74 +31,143 @@ SkillTrade is a **peer-to-peer skill exchange platform** where users can **teach
 
 ## 🛠 Installation & Setup
 
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- npm or yarn
+- Git
+- A text editor (VS Code recommended)
+
 ### **1️⃣ Clone the Repository**
 ```bash
 git clone https://github.com/MartinMans/SkillTrade.git
-cd skilltrade
+cd SkillTrade
 ```
 
-### **2️⃣ Install Dependencies**
-Ensure you have **Node.js** and **Python** installed.
-
-#### **Frontend Setup (React)**
-```bash
-cd frontend
-npm install
-```
-
-#### **Backend Setup (FastAPI)**
+### **2️⃣ Backend Setup**
+1. Navigate to the backend directory:
 ```bash
 cd backend
-python -m venv venv  # Create a virtual environment # You may not need to run this and can directly skip to the next step.
-source venv/bin/activate  # On macOS/Linux
-# OR
-venv\Scripts\activate  # On Windows
+```
+
+2. Create and activate a virtual environment:
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+.\venv\Scripts\activate
+# On Unix or MacOS:
+source venv/bin/activate
+
+# Verify activation (should show virtual environment path)
+python -c "import sys; print(sys.prefix)"
+```
+
+3. Install dependencies:
+```bash
 pip install -r requirements.txt
 ```
 
----
-
-## ▶️ Running the Application
-
-### 🔹 Start the Backend Server
-Ensure the database is set up:
+4. Set up environment variables:
 ```bash
-python reset_db.py  # Resets the database
+# Copy the environment template
+cp .env.example .env
+# The default configuration should work out of the box for local development
 ```
 
-Run the FastAPI backend:
+5. Initialize and seed the database:
 ```bash
-uvicorn app.main:app --reload # Note: Our main file is within app, hence: app.main
+# Initialize the database (this might take a few seconds)
+python -m app.reset_db
+
+# (Optional) Add sample data for testing
+# This will create test users with the following credentials:
+# - john@example.com / password123
+# - jane@example.com / password123
+python -m app.seed_db
 ```
 
-The API will be available at: [http://127.0.0.1:8000](http://127.0.0.1:8000)  
-API Docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+6. Start the FastAPI server:
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
----
+The API will be available at: http://localhost:8000  
+API Documentation (Swagger UI): http://localhost:8000/docs
 
-### 🔹 Start the Frontend
-Navigate to the frontend directory:
+### **3️⃣ Frontend Setup**
+1. Open a new terminal and navigate to the frontend directory:
 ```bash
 cd frontend
 ```
 
-Start the development server:
+2. Install dependencies:
 ```bash
-npm start
+npm install
+# or if using yarn:
+yarn install
 ```
 
-The frontend will be available at: [http://localhost:3000](http://localhost:3000)
+3. Set up environment variables:
+```bash
+# Copy the environment template
+cp .env.example .env
+# The default configuration should work out of the box
+```
 
----
+4. Start the development server:
+```bash
+npm run dev
+# or if using yarn:
+yarn dev
+```
+
+The frontend will be available at: http://localhost:5173
+
+### **4️⃣ Verify Setup**
+1. Backend health check:
+   - Open http://localhost:8000/docs in your browser
+   - You should see the FastAPI Swagger documentation
+
+2. Frontend check:
+   - Open http://localhost:5173 in your browser
+   - You should see the SkillTrade landing page
 
 ## ⚡ Technologies Used
 
-### **Frontend**
-- React.js (JavaScript)
-- Bootstrap (UI Styling)
+### Frontend
+- React with Vite
+- TypeScript
+- Modern UI components and styling
 
-### **Backend**
+### Backend
 - FastAPI (Python)
-- PostgreSQL (Database)
+- SQLite (Development Database)
 - SQLAlchemy (ORM)
-- JWT Authentication (Security)
+- JWT Authentication
+- Pydantic (Data Validation)
+
+## Environment Variables
+
+### Frontend (.env)
+- `VITE_API_BASE_URL`: Backend API URL (default: http://localhost:8000)
+
+### Backend (.env)
+- `DATABASE_URL`: Database connection string
+- `SECRET_KEY`: Application secret key for JWT
+- `ACCESS_TOKEN_EXPIRE_MINUTES`: JWT token expiration time
+- `ALLOWED_ORIGINS`: Allowed frontend origins for CORS
+- `PORT`: Server port (default: 8000)
+- `HOST`: Server host (default: 0.0.0.0)
+
+## Contributing
+
+1. Create a new branch for your feature
+2. Make your changes
+3. Submit a pull request
+
+## License
+
+[Add your license here]
