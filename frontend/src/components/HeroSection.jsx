@@ -1,4 +1,3 @@
-// Component for the full-screen hero section with a background image, title, description, and button.
 function HeroSection({ onStartTrading }) {
   return (
     <div className="hero-section">
@@ -18,7 +17,4 @@ function HeroSection({ onStartTrading }) {
   );
 }
 
-// Make the component available globally
-window.HeroSection = HeroSection;
-console.log('HeroSection component loaded');
-window.markComponentLoaded();
+export default HeroSection; 
