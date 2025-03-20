@@ -33,7 +33,7 @@ SkillTrade is a **peer-to-peer skill exchange platform** where users can **teach
 
 ### **1️⃣ Clone the Repository**
 ```bash
-git clone https://github.com/your-repository-url.git
+git clone https://github.com/MartinMans/SkillTrade.git
 cd skilltrade
 ```
 
