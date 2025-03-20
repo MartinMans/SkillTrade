@@ -1,11 +1,13 @@
-// Navbar component with a dropdown for "Features" and a Sign Up / Log In button.
-const { useState, useEffect } = React;
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import SignupModal from './SignupModal';
 
 function NavBar() {
   const [dropdownActive, setDropdownActive] = useState(false);
   const [dropdownHovered, setDropdownHovered] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigate = useNavigate();
   const isDropdownVisible = dropdownActive || dropdownHovered;
 
   // Check authentication status on component mount and listen for changes
@@ -40,11 +42,8 @@ function NavBar() {
 
   const handleAuthClick = () => {
     if (isAuthenticated) {
-      // If user is logged in, redirect to profile page
-      const root = document.getElementById('root');
-      ReactDOM.render(React.createElement(ProfilePage), root);
+      navigate('/profile');
     } else {
-      // If user is not logged in, show auth modal
       setShowAuthModal(true);
     }
   };
@@ -70,16 +69,10 @@ function NavBar() {
             href="#" 
             onClick={(e) => {
               e.preventDefault();
-              if (window.location.pathname !== '/') {
-                const root = document.getElementById('root');
-                ReactDOM.render(React.createElement(HomePage), root);
-                // After rendering HomePage, scroll to hero section
-                setTimeout(() => {
-                  handleSmoothScroll('.hero-section');
-                }, 100);
-              } else {
+              navigate('/');
+              setTimeout(() => {
                 handleSmoothScroll('.hero-section');
-              }
+              }, 100);
             }}
             style={{ cursor: 'pointer' }}
           >
@@ -88,52 +81,44 @@ function NavBar() {
           <button
             className="navbar-toggler"
             type="button"
-            data-toggle="collapse"
-            data-target="#navbarNav"
-            aria-controls="navbarNav"
-            aria-expanded="false"
+            onClick={() => setDropdownActive(!dropdownActive)}
+            aria-expanded={dropdownActive}
             aria-label="Toggle navigation">
             <span className="navbar-toggler-icon"></span>
           </button>
-          <div className="collapse navbar-collapse justify-content-end" id="navbarNav">
-            <ul className="navbar-nav align-items-center">
-              <li className="nav-item px-2">
+          <div className={`navbar-collapse ${dropdownActive ? 'show' : ''}`}>
+            <ul className="navbar-nav ms-auto">
+              <li className="nav-item">
                 <a 
-                  className="nav-link py-2" 
+                  className="nav-link" 
                   href="#about"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (window.location.pathname !== '/') {
-                      const root = document.getElementById('root');
-                      ReactDOM.render(React.createElement(HomePage), root);
-                      // After rendering HomePage, scroll to about section
-                      setTimeout(() => {
-                        handleSmoothScroll('#about');
-                      }, 100);
-                    } else {
+                    navigate('/');
+                    setTimeout(() => {
                       handleSmoothScroll('#about');
-                    }
+                    }, 100);
                   }}
                 >
                   About
                 </a>
               </li>
-              <li className="nav-item dropdown px-2"
+              <li className="nav-item dropdown"
                   onMouseEnter={handleMouseEnter}
                   onMouseLeave={handleMouseLeave}>
-                <a className="nav-link dropdown-toggle py-2" href="#" onClick={toggleDropdown}>
+                <a className="nav-link dropdown-toggle" href="#" onClick={toggleDropdown}>
                   Features
                 </a>
                 {isDropdownVisible && (
-                  <div className="dropdown-menu smooth-dropdown custom-dropdown show">
-                    <p className="dropdown-item-custom text-center mb-0">AI-Powered Matching</p>
-                    <p className="dropdown-item-custom text-center mb-0">Skill-Based Token Exchange</p>
-                    <p className="dropdown-item-custom text-center mb-0">Fair Trade System</p>
-                    <p className="dropdown-item-custom text-center mb-0">Rating System</p>
+                  <div className="custom-dropdown show">
+                    <p className="dropdown-item-custom">AI-Powered Matching</p>
+                    <p className="dropdown-item-custom">Skill-Based Token Exchange</p>
+                    <p className="dropdown-item-custom">Fair Trade System</p>
+                    <p className="dropdown-item-custom">Rating System</p>
                   </div>
                 )}
               </li>
-              <li className="nav-item ms-2">
+              <li className="nav-item">
                 <button 
                   className="btn btn-primary"
                   onClick={handleAuthClick}
@@ -150,7 +135,4 @@ function NavBar() {
   );
 }
 
-// Make the component available globally
-window.NavBar = NavBar;
-console.log('NavBar component loaded');
-window.markComponentLoaded(); 
+export default NavBar; 

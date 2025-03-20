@@ -1,5 +1,7 @@
-// Main HomePage component that renders the Navbar, HeroSection, About section, and SignupModal.
-const { useState, useEffect } = React;
+import { useState, useEffect } from 'react';
+import NavBar from './NavBar';
+import HeroSection from './HeroSection';
+import SignupModal from './SignupModal';
 
 function HomePage() {
   const [showModal, setShowModal] = useState(false);
@@ -43,7 +45,4 @@ function HomePage() {
   );
 }
 
-// Make the component available globally
-window.HomePage = HomePage;
-console.log('HomePage component loaded');
-window.markComponentLoaded();
+export default HomePage; 
