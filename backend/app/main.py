@@ -22,6 +22,9 @@ from .reset_trades import reset_trades
 
 app = FastAPI()
 
+print("DATABASE_URL:", os.getenv("DATABASE_URL"))
+
+
 # Configure CORS with more specific settings
 origins = [
     "http://localhost:5173",  # Vite dev server
