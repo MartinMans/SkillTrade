@@ -24,6 +24,7 @@ const ChatWindow = ({ matchId, matchStatus, otherUser, onClose }) => {
     const theme = useTheme();
 
     useEffect(() => {
+        console.log('ChatWindow mounted/updated with matchId:', matchId);
         fetchMessages();
         const interval = setInterval(fetchMessages, 5000);
         return () => clearInterval(interval);
@@ -31,7 +32,8 @@ const ChatWindow = ({ matchId, matchStatus, otherUser, onClose }) => {
 
     const fetchMessages = async () => {
         try {
-            const response = await fetch(`/api/matches/${matchId}/messages`, {
+            console.log('Fetching messages for match:', matchId);
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/${matchId}/messages`, {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
                     'Content-Type': 'application/json'
@@ -41,6 +43,7 @@ const ChatWindow = ({ matchId, matchStatus, otherUser, onClose }) => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
+            console.log('Received messages:', data);
             setMessages(data);
             scrollToBottom();
         } catch (error) {
@@ -76,8 +79,9 @@ const ChatWindow = ({ matchId, matchStatus, otherUser, onClose }) => {
         if (!newMessage.trim()) return;
 
         try {
+            console.log('Sending message:', newMessage);
             setLoading(true);
-            const response = await fetch(`/api/matches/${matchId}/messages`, {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/${matchId}/messages`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

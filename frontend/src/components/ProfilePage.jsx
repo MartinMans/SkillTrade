@@ -460,7 +460,7 @@ function ProfilePage() {
 
   return (
     <div className="profile-page">
-      <ProfileNavBar />
+      <ProfileNavBar userProfile={userProfile} />
       <div className="container">
         {/* Profile Header */}
         <div className="row mb-4">

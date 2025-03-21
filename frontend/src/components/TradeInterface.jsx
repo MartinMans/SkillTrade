@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge } from 'react-bootstrap';
+import { Rating } from '@mui/material';
 
 const TradeInterface = ({ match, userProfile }) => {
   // Add detailed logging of the match object
@@ -17,6 +18,7 @@ const TradeInterface = ({ match, userProfile }) => {
   });
 
   const [isCompleting, setIsCompleting] = useState(false);
+  const [rating, setRating] = useState(5);
 
   // Get the current user's teaching skill
   const currentUserTeachingSkill = userProfile.teachingSkills[0]?.skill_name;
@@ -122,37 +124,52 @@ const TradeInterface = ({ match, userProfile }) => {
   };
 
   const handleCompleteTrade = async () => {
-    // Show confirmation dialog
-    if (!window.confirm('Are you sure you want to complete this trade? This action cannot be undone.')) {
-      return;
+    if (!window.confirm(`Are you sure you want to complete this trade with a ${rating}-star rating? This action cannot be undone.`)) {
+        return;
     }
 
     try {
-      setIsCompleting(true);
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/trades/${match.match_id}/complete`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+        setIsCompleting(true);
+        const token = localStorage.getItem('token');
+
+        // First submit the rating
+        const ratingResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/trades/${match.match_id}/rate`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                score: rating
+            })
+        });
+
+        if (!ratingResponse.ok) {
+            const error = await ratingResponse.json();
+            throw new Error(error.detail || 'Failed to submit rating');
         }
-      });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to complete trade');
-      }
+        // Then complete the trade
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/trades/${match.match_id}/complete`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
 
-      // Show success message
-      alert('Trade completed successfully! The page will now refresh.');
-      
-      // Refresh the page
-      window.location.reload();
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to complete trade');
+        }
+
+        alert('Trade completed successfully! The page will now refresh.');
+        window.location.reload();
     } catch (error) {
-      console.error('Error completing trade:', error);
-      alert(error.message || 'Failed to complete trade. Please try again.');
+        console.error('Error completing trade:', error);
+        alert(error.message || 'Failed to complete trade. Please try again.');
     } finally {
-      setIsCompleting(false);
+        setIsCompleting(false);
     }
   };
 
@@ -194,6 +211,10 @@ const TradeInterface = ({ match, userProfile }) => {
           <div className="d-flex justify-content-between align-items-center">
             <div className="participant">
               <h6 className="mb-1">You ({userProfile.username})</h6>
+              <div className="d-flex align-items-center mb-2">
+                <Rating value={userProfile.rating || 5} readOnly size="small" />
+                <span className="ms-1 text-muted">({userProfile.rating || 5}/5)</span>
+              </div>
               <Badge bg="info">Teaching: {userTeachingSkill}</Badge>
               <Badge bg="secondary" className="ms-2">Learning: {userLearningSkill}</Badge>
             </div>
@@ -202,6 +223,10 @@ const TradeInterface = ({ match, userProfile }) => {
             </div>
             <div className="participant">
               <h6 className="mb-1">{partner}</h6>
+              <div className="d-flex align-items-center mb-2">
+                <Rating value={match.rating || 5} readOnly size="small" />
+                <span className="ms-1 text-muted">({match.rating || 5}/5)</span>
+              </div>
               <Badge bg="info">Teaching: {userLearningSkill}</Badge>
               <Badge bg="secondary" className="ms-2">Learning: {userTeachingSkill}</Badge>
             </div>
@@ -276,14 +301,23 @@ const TradeInterface = ({ match, userProfile }) => {
             Report Issue
           </button>
           {allTasksComplete && (
-            <button 
-              className="btn btn-success"
-              onClick={handleCompleteTrade}
-              disabled={isCompleting}
-            >
-              <i className={`bi ${isCompleting ? 'bi-hourglass-split' : 'bi-check-circle'} me-2`}></i>
-              {isCompleting ? 'Completing...' : 'Complete Trade'}
-            </button>
+            <div className="d-flex align-items-center gap-3">
+              <Rating
+                value={rating}
+                onChange={(event, newValue) => {
+                  setRating(newValue);
+                }}
+                size="large"
+              />
+              <button 
+                className="btn btn-success"
+                onClick={handleCompleteTrade}
+                disabled={isCompleting}
+              >
+                <i className={`bi ${isCompleting ? 'bi-hourglass-split' : 'bi-check-circle'} me-2`}></i>
+                {isCompleting ? 'Completing...' : 'Complete Trade'}
+              </button>
+            </div>
           )}
         </div>
       </Card.Body>

@@ -13,10 +13,12 @@ from sqlalchemy import or_, and_
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
+import os
 
 from . import models, schemas, crud
 from .db import SessionLocal, engine
 from .auth import create_access_token, pwd_context, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
+from .reset_trades import reset_trades
 
 app = FastAPI()
 
@@ -207,17 +209,165 @@ async def read_current_user(current_user: models.User = Depends(get_current_user
     return current_user
 
 @app.get("/matches/", response_model=List[schemas.MatchResult], tags=["Matching"])
-async def get_potential_matches(
+async def get_matches(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Retrieve potential skill trade matches for the current user.
-    Returns a list of users who have matching skills for trading.
-    Each match includes chat functionality by default.
-    """
-    matches = crud.find_potential_matches(db, current_user.user_id)
-    return matches
+    """Get all potential skill matches for the current user."""
+    try:
+        # Get the user's teaching and learning skills
+        user_skills = db.query(models.UserSkill).filter(
+            models.UserSkill.user_id == current_user.user_id
+        ).all()
+
+        teaching_skills = [skill.skill_id for skill in user_skills if skill.type == 'teach']
+        learning_skills = [skill.skill_id for skill in user_skills if skill.type == 'learn']
+
+        # Get completed trades for the current user
+        completed_trades = db.query(models.TradeHistory).filter(
+            or_(
+                models.TradeHistory.user1_id == current_user.user_id,
+                models.TradeHistory.user2_id == current_user.user_id
+            )
+        ).all()
+
+        # Create a set of (user_id, taught_skill, learned_skill) tuples for completed trades
+        completed_trade_combinations = set()
+        for trade in completed_trades:
+            if trade.user1_id == current_user.user_id:
+                completed_trade_combinations.add((trade.user2_id, trade.user1_taught, trade.user2_taught))
+            else:
+                completed_trade_combinations.add((trade.user1_id, trade.user2_taught, trade.user1_taught))
+
+        # Get skill names for all skills
+        skill_id_to_name = {}
+        all_skill_ids = set()
+        for skill in user_skills:
+            all_skill_ids.add(skill.skill_id)
+        for skill in teaching_skills:
+            all_skill_ids.add(skill)
+        
+        if all_skill_ids:
+            skill_records = db.query(models.Skill).filter(
+                models.Skill.skill_id.in_(all_skill_ids)
+            ).all()
+            skill_id_to_name = {skill.skill_id: skill.skill_name for skill in skill_records}
+
+        # Find potential matches excluding already completed combinations
+        potential_matches = []
+        
+        # Get all users who have matching skills
+        matching_users = db.query(models.UserSkill).filter(
+            and_(
+                models.UserSkill.user_id != current_user.user_id,
+                or_(
+                    and_(
+                        models.UserSkill.skill_id.in_(learning_skills),
+                        models.UserSkill.type == 'teach'
+                    ),
+                    and_(
+                        models.UserSkill.skill_id.in_(teaching_skills),
+                        models.UserSkill.type == 'learn'
+                    )
+                )
+            )
+        ).all()
+
+        # Group users by their user_id
+        user_skill_map = {}
+        for skill in matching_users:
+            if skill.user_id not in user_skill_map:
+                user_skill_map[skill.user_id] = {'teach': [], 'learn': []}
+            user_skill_map[skill.user_id][skill.type].append(skill.skill_id)
+
+        # Process each potential match
+        for user_id, skills in user_skill_map.items():
+            # Find matching skill combinations
+            matching_teach = set(teaching_skills) & set(skills['learn'])
+            matching_learn = set(learning_skills) & set(skills['teach'])
+
+            if matching_teach and matching_learn:  # Only proceed if there are both teaching and learning matches
+                # Get the other user's details
+                other_user = db.query(models.User).filter(
+                    models.User.user_id == user_id
+                ).first()
+
+                if other_user:
+                    # Check if any valid skill combinations exist that haven't been traded before
+                    valid_combinations_exist = False
+                    for teach_id in matching_teach:
+                        for learn_id in matching_learn:
+                            teach_skill = skill_id_to_name.get(teach_id)
+                            learn_skill = skill_id_to_name.get(learn_id)
+                            if teach_skill and learn_skill:
+                                combination = (user_id, teach_skill, learn_skill)
+                                if combination not in completed_trade_combinations:
+                                    valid_combinations_exist = True
+                                    break
+                        if valid_combinations_exist:
+                            break
+
+                    if valid_combinations_exist:
+                        # Get skill names for display
+                        teaching_skill_names = [skill_id_to_name[skill_id] for skill_id in matching_teach]
+                        learning_skill_names = [skill_id_to_name[skill_id] for skill_id in matching_learn]
+
+                        # Check for existing match
+                        existing_match = db.query(models.Match).filter(
+                            or_(
+                                and_(
+                                    models.Match.user1_id == current_user.user_id,
+                                    models.Match.user2_id == user_id
+                                ),
+                                and_(
+                                    models.Match.user1_id == user_id,
+                                    models.Match.user2_id == current_user.user_id
+                                )
+                            )
+                        ).first()
+
+                        if existing_match:
+                            match_dict = {
+                                "match_id": existing_match.match_id,
+                                "username": other_user.username,
+                                "user_id": other_user.user_id,
+                                "teaching": teaching_skill_names,
+                                "learning": learning_skill_names,
+                                "match_status": existing_match.match_status,
+                                "initiator_id": existing_match.initiator_id,
+                                "rating": other_user.rating,
+                                "trade_request_time": existing_match.trade_request_time
+                            }
+                        else:
+                            # Create new match
+                            new_match = models.Match(
+                                user1_id=min(current_user.user_id, user_id),
+                                user2_id=max(current_user.user_id, user_id),
+                                match_status="pending",
+                                trade_request_time=None
+                            )
+                            db.add(new_match)
+                            db.commit()
+                            db.refresh(new_match)
+
+                            match_dict = {
+                                "match_id": new_match.match_id,
+                                "username": other_user.username,
+                                "user_id": other_user.user_id,
+                                "teaching": teaching_skill_names,
+                                "learning": learning_skill_names,
+                                "match_status": new_match.match_status,
+                                "initiator_id": None,
+                                "rating": other_user.rating,
+                                "trade_request_time": new_match.trade_request_time
+                            }
+
+                        potential_matches.append(match_dict)
+
+        return potential_matches
+    except Exception as e:
+        print(f"Error in get_matches: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/matches/active", response_model=List[schemas.MatchWithMessages], tags=["Matching"])
 async def get_active_matches(
@@ -306,17 +456,25 @@ async def get_match_messages(
     db: Session = Depends(get_db)
 ):
     """Get all messages for a match."""
+    print(f"Fetching messages for match {match_id}")
     # Verify user is part of the match
     match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
     if not match:
+        print(f"Match {match_id} not found")
         raise HTTPException(status_code=404, detail="Match not found")
     
+    print(f"Match found. User1: {match.user1_id}, User2: {match.user2_id}, Current user: {current_user.user_id}")
     if match.user1_id != current_user.user_id and match.user2_id != current_user.user_id:
+        print(f"User {current_user.user_id} not authorized to view messages for match {match_id}")
         raise HTTPException(status_code=403, detail="Not authorized to view these messages")
 
     messages = db.query(models.Chat).filter(
         models.Chat.match_id == match_id
     ).order_by(models.Chat.timestamp.asc()).all()
+    
+    print(f"Found {len(messages)} messages")
+    for msg in messages:
+        print(f"Message: {msg.message} from user {msg.sender_id} at {msg.timestamp}")
 
     return messages
 
@@ -328,23 +486,34 @@ async def create_message(
     db: Session = Depends(get_db)
 ):
     """Create a new message in a match."""
+    print(f"Creating new message for match {match_id}")
     # Verify user is part of the match
     match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
     if not match:
+        print(f"Match {match_id} not found")
         raise HTTPException(status_code=404, detail="Match not found")
     
+    print(f"Match found. User1: {match.user1_id}, User2: {match.user2_id}, Current user: {current_user.user_id}")
     if match.user1_id != current_user.user_id and match.user2_id != current_user.user_id:
+        print(f"User {current_user.user_id} not authorized to send messages in match {match_id}")
         raise HTTPException(status_code=403, detail="Not authorized to send messages in this match")
 
+    print(f"Creating message: {message.message}")
     db_message = models.Chat(
         match_id=match_id,
         sender_id=current_user.user_id,
         message=message.message
     )
     db.add(db_message)
-    db.commit()
-    db.refresh(db_message)
-    return db_message
+    try:
+        db.commit()
+        db.refresh(db_message)
+        print(f"Successfully created message with ID {db_message.chat_id}")
+        return db_message
+    except Exception as e:
+        print(f"Error creating message: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/matches/{match_id}", tags=["Matching"])
 async def delete_match(
@@ -658,6 +827,34 @@ async def complete_trade(
                 trade.user2_teaching_done and trade.user2_learning_done):
             raise HTTPException(status_code=400, detail="Cannot complete trade until all parts are marked complete")
 
+        # Get the other user's ID
+        other_user_id = match.user2_id if current_user.user_id == match.user1_id else match.user1_id
+
+        # Check if the other user has already rated
+        other_user_rating = db.query(models.Rating).filter(
+            models.Rating.trade_id == trade.trade_id,
+            models.Rating.reviewer_id == other_user_id
+        ).first()
+
+        # If the other user has completed but not rated, automatically add a 5-star rating
+        if trade.status == "completed" and not other_user_rating:
+            print(f"Adding automatic 5-star rating for user {current_user.user_id}")
+            new_rating = models.Rating(
+                trade_id=trade.trade_id,
+                reviewer_id=current_user.user_id,
+                rated_user_id=other_user_id,
+                score=5,
+                feedback="Auto-generated 5-star rating"
+            )
+            db.add(new_rating)
+
+            # Update rated user's average rating
+            rated_user = db.query(models.User).filter(models.User.user_id == other_user_id).first()
+            all_ratings = db.query(models.Rating).filter(models.Rating.rated_user_id == other_user_id).all()
+            total_score = sum(r.score for r in all_ratings) + 5
+            new_average = round(total_score / (len(all_ratings) + 1))
+            rated_user.rating = new_average
+
         # Update trade status and completion time
         trade.status = "completed"
         trade.completed_at = datetime.utcnow()
@@ -692,6 +889,72 @@ async def complete_trade(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/trades/{match_id}/rate", response_model=schemas.RatingResponse, tags=["Trading"])
+async def submit_rating(
+    match_id: int,
+    rating: schemas.RatingCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Submit a rating for a trade."""
+    try:
+        # Get the trade record
+        trade = db.query(models.Trade).filter(models.Trade.match_id == match_id).first()
+        if not trade:
+            raise HTTPException(status_code=404, detail="Trade not found")
+
+        # Verify trade is either completed or ready to be completed
+        if trade.status != "completed" and not (
+            trade.user1_teaching_done and trade.user1_learning_done and 
+            trade.user2_teaching_done and trade.user2_learning_done
+        ):
+            raise HTTPException(status_code=400, detail="Can only rate completed trades or trades ready to be completed")
+
+        # Get the match to verify user is part of it and get other user
+        match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+        if not match or current_user.user_id not in [match.user1_id, match.user2_id]:
+            raise HTTPException(status_code=403, detail="Not authorized to rate this trade")
+
+        # Get the other user's ID
+        rated_user_id = match.user2_id if current_user.user_id == match.user1_id else match.user1_id
+
+        # Check if user has already submitted a rating for this trade
+        existing_rating = db.query(models.Rating).filter(
+            models.Rating.trade_id == trade.trade_id,
+            models.Rating.reviewer_id == current_user.user_id
+        ).first()
+        if existing_rating:
+            raise HTTPException(status_code=400, detail="You have already rated this trade")
+
+        # Validate rating score
+        if rating.score < 1 or rating.score > 5:
+            raise HTTPException(status_code=400, detail="Rating score must be between 1 and 5")
+
+        # Create new rating
+        new_rating = models.Rating(
+            trade_id=trade.trade_id,
+            reviewer_id=current_user.user_id,
+            rated_user_id=rated_user_id,
+            score=rating.score,
+            feedback=rating.feedback
+        )
+        db.add(new_rating)
+
+        # Update user's average rating
+        rated_user = db.query(models.User).filter(models.User.user_id == rated_user_id).first()
+        all_ratings = db.query(models.Rating).filter(models.Rating.rated_user_id == rated_user_id).all()
+        total_score = sum(r.score for r in all_ratings) + rating.score
+        new_average = round(total_score / (len(all_ratings) + 1))
+        rated_user.rating = new_average
+
+        db.commit()
+        db.refresh(new_rating)
+
+        return new_rating
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/matches/{match_id}/trade", tags=["Trading"])
 async def get_trade_for_match(
     match_id: int,
@@ -714,5 +977,21 @@ async def get_trade_for_match(
             "trade_id": trade.trade_id,
             "status": trade.status
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/reset-trades", tags=["Admin"])
+async def reset_all_trades(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reset all trades, trade history, matches, ratings, and chats. Only available in development."""
+    # Check if we're in development mode
+    if not os.getenv('DEVELOPMENT_MODE'):
+        raise HTTPException(status_code=403, detail="This endpoint is only available in development mode")
+    
+    try:
+        reset_trades()
+        return {"message": "Successfully reset all trades and related data"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

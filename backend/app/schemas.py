@@ -116,3 +116,17 @@ class TradeUpdate(BaseModel):
     type: str  # 'teaching' or 'learning'
     user_position: str  # 'user1' or 'user2'
     completed: bool
+
+class RatingCreate(BaseModel):
+    score: int  # 1-5 stars
+    feedback: Optional[str] = None
+
+class RatingResponse(BaseModel):
+    rating_id: int
+    score: int
+    feedback: Optional[str]
+    rated_user_id: int
+    reviewer_id: int
+
+    class Config:
+        from_attributes = True

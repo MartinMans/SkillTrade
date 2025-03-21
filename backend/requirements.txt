@@ -11,9 +11,9 @@ alembic==1.13.1
 
 # Authentication & Security
 python-jose[cryptography]==3.3.0
-passlib==1.7.4
+passlib[bcrypt]==1.7.4
 python-multipart==0.0.9
-bcrypt==4.0.1
+bcrypt==4.1.2
 
 # CORS & API
 starlette==0.36.3
@@ -26,3 +26,6 @@ httpx==0.26.0
 
 # Utilities
 email-validator==2.1.0.post1
+
+# New dependencies
+pydantic-settings==2.1.0
