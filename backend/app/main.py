@@ -3,32 +3,64 @@
 # uvicorn app.main:app --reload
 # http://127.0.0.1:8000/docs
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from datetime import timedelta, datetime
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import or_, and_
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 from . import models, schemas, crud
 from .db import SessionLocal, engine
 from .auth import create_access_token, pwd_context, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
 
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import or_, and_
-
 app = FastAPI()
 
-# Configure CORS
+# Configure CORS with more specific settings
+origins = [
+    "http://localhost:5173",  # Vite dev server
+    "http://localhost:3000",  # React dev server
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins (or restrict to ["http://127.0.0.1:5500"])
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods (GET, POST, DELETE, etc.)
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Create the database tables (for development)
 models.Base.metadata.create_all(bind=engine)
+
+# Exception handlers
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}
+    )
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)}
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)}
+    )
 
 # Dependency to provide a database session per request
 def get_db():
@@ -350,3 +382,127 @@ async def cleanup_matches(
     db.query(models.Match).delete()
     db.commit()
     return {"message": "All matches and associated messages have been deleted"}
+
+@app.post("/matches/{match_id}/start-trade", response_model=schemas.MatchResult, tags=["Matching"])
+async def start_trade(
+    match_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+        if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        # Verify user is part of the match
+        if current_user.user_id not in [match.user1_id, match.user2_id]:
+            raise HTTPException(status_code=403, detail="Not authorized to start trade for this match")
+
+        # Get the other user in the match
+        other_user = match.user2 if match.user1_id == current_user.user_id else match.user1
+        
+        # Get other user's teaching and learning skills
+        teaching_skills, learning_skills = crud.get_user_skills(db, other_user.user_id)
+
+        # If there's a pending trade request that's over 24 hours old, clear it
+        if (match.match_status == "pending_trade" and match.trade_request_time and 
+            (datetime.utcnow() - match.trade_request_time).total_seconds() > 24 * 3600):
+            match.match_status = "pending"
+            match.trade_request_time = None
+            match.initiator_id = None
+            db.commit()
+
+        # Handle initial trade request (from PENDING state)
+        if match.match_status == "pending":
+            match.match_status = "pending_trade"
+            match.trade_request_time = datetime.utcnow()
+            match.initiator_id = current_user.user_id
+            db.commit()
+            db.refresh(match)
+            return {
+                "match_id": match.match_id,
+                "user_id": other_user.user_id,
+                "username": other_user.username,
+                "teaching": [skill.skill_name for skill in teaching_skills],
+                "learning": [skill.skill_name for skill in learning_skills],
+                "rating": other_user.rating,
+                "match_status": match.match_status,
+                "trade_request_time": match.trade_request_time,
+                "initiator_id": match.initiator_id
+            }
+
+        # If user is canceling their trade request
+        if match.match_status == "pending_trade":
+            if current_user.user_id == match.initiator_id:
+                match.match_status = "pending"
+                match.trade_request_time = None
+                match.initiator_id = None
+                db.commit()
+
+        # Handle second user accepting trade
+        if match.match_status == "pending_trade":
+            # Check if this is the other user accepting
+            if current_user.user_id != match.initiator_id:
+                # Create new trade
+                trade = models.Trade(
+                    match_id=match.match_id,
+                    status="in_progress"
+                )
+                db.add(trade)
+                match.match_status = "in_trade"
+                match.trade_request_time = None
+                match.initiator_id = None
+                db.commit()
+
+        db.refresh(match)  # Refresh to ensure we have the latest state
+
+        # Return the match result with updated status
+        return {
+            "match_id": match.match_id,
+            "user_id": other_user.user_id,
+            "username": other_user.username,
+            "teaching": [skill.skill_name for skill in teaching_skills],
+            "learning": [skill.skill_name for skill in learning_skills],
+            "rating": other_user.rating,
+            "match_status": match.match_status,
+            "trade_request_time": match.trade_request_time,
+            "initiator_id": match.initiator_id
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/matches/{match_id}/trade-status", tags=["Matching"])
+async def get_trade_status(
+    match_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the current trade status for a match.
+    Also checks for timeout of ready status.
+    """
+    match = db.query(models.Match).filter(
+        models.Match.match_id == match_id,
+        or_(
+            models.Match.user1_id == current_user.user_id,
+            models.Match.user2_id == current_user.user_id
+        )
+    ).first()
+
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    # Check for timeout if status is ready
+    if match.match_status == models.MatchStatus.READY and match.ready_at:
+        if datetime.utcnow() - match.ready_at > timedelta(hours=24):
+            match.match_status = models.MatchStatus.ACCEPTED
+            match.ready_at = None
+            db.commit()
+            db.refresh(match)
+
+    return {
+        "match_status": match.match_status,
+        "ready_at": match.ready_at,
+        "trade": match.trade.status if match.trade else None
+    }

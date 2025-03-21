@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from .enums import SkillType, TradeStatus, MatchStatus
+import enum
 
 Base = declarative_base()
 
@@ -18,8 +19,6 @@ class User(Base):
 
     # Relationships
     skills_teaching = relationship("UserSkill", back_populates="user", foreign_keys="UserSkill.user_id")
-    trades_as_user1 = relationship("Trade", back_populates="user1", foreign_keys="Trade.user1_id")
-    trades_as_user2 = relationship("Trade", back_populates="user2", foreign_keys="Trade.user2_id")
     ratings_given = relationship("Rating", back_populates="reviewer", foreign_keys="Rating.reviewer_id")
     ratings_received = relationship("Rating", back_populates="rated_user", foreign_keys="Rating.rated_user_id")
     chat_messages = relationship("Chat", back_populates="sender")
@@ -52,15 +51,13 @@ class Trade(Base):
     __tablename__ = "trades"
     
     trade_id = Column(Integer, primary_key=True, index=True)
-    user1_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    user2_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    status = Column(Enum(TradeStatus), default=TradeStatus.PENDING, nullable=False)
+    match_id = Column(Integer, ForeignKey("matches.match_id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
+    status = Column(String, default="active", nullable=False)
 
     # Relationships
-    user1 = relationship("User", foreign_keys=[user1_id], back_populates="trades_as_user1")
-    user2 = relationship("User", foreign_keys=[user2_id], back_populates="trades_as_user2")
+    match = relationship("Match", back_populates="trade")
     ratings = relationship("Rating", back_populates="trade")
     trade_history = relationship("TradeHistory", back_populates="trade")
 
@@ -89,7 +86,7 @@ class Chat(Base):
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
-    match = relationship("Match", backref="chat_messages")
+    match = relationship("Match", back_populates="chat_messages")
     sender = relationship("User", back_populates="chat_messages")
 
 class FraudFlag(Base):
@@ -114,18 +111,33 @@ class TradeHistory(Base):
     user = relationship("User", back_populates="trade_history")
     trade = relationship("Trade", back_populates="trade_history")
 
+class MatchStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    PENDING_TRADE = "pending_trade"
+    IN_TRADE = "in_trade"
+    COMPLETED = "completed"
+
 class Match(Base):
     __tablename__ = "matches"
-
+    
     match_id = Column(Integer, primary_key=True, index=True)
     user1_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     user2_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    match_status = Column(Enum(MatchStatus), default=MatchStatus.PENDING, nullable=False)
+    match_status = Column(Enum("pending", "accepted", "rejected", "pending_trade", "in_trade", "completed", name="matchstatus"), default="pending")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    # Ensure unique pairs
-    __table_args__ = (UniqueConstraint("user1_id", "user2_id", name="unique_match"),)
+    trade_request_time = Column(DateTime, nullable=True)
+    ready_at = Column(DateTime, nullable=True)
+    initiator_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
 
     # Relationships
     user1 = relationship("User", foreign_keys=[user1_id], back_populates="matches_as_user1")
     user2 = relationship("User", foreign_keys=[user2_id], back_populates="matches_as_user2")
+    chat_messages = relationship("Chat", back_populates="match")
+    trade = relationship("Trade", back_populates="match", uselist=False)
+
+    # Ensure unique pairs
+    __table_args__ = (
+        UniqueConstraint('user1_id', 'user2_id', name='unique_user_pair'),
+    )

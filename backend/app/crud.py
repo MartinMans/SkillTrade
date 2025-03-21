@@ -76,7 +76,12 @@ def get_skill_by_exact_name(db: Session, skill_name: str) -> Optional[models.Ski
         .first()
 
 # UserSkill CRUD operations
-def add_user_skill(db: Session, user_id: int, skill_id: int, skill_type: schemas.SkillType) -> models.UserSkill:
+def add_user_skill(db: Session, user_id: int, skill_id: int, skill_type: schemas.SkillType) -> dict:
+    # Get the skill first to include its name in the response
+    skill = db.query(models.Skill).filter(models.Skill.skill_id == skill_id).first()
+    if not skill:
+        raise ValueError("Skill not found")
+
     db_user_skill = models.UserSkill(
         user_id=user_id,
         skill_id=skill_id,
@@ -85,7 +90,14 @@ def add_user_skill(db: Session, user_id: int, skill_id: int, skill_type: schemas
     db.add(db_user_skill)
     db.commit()
     db.refresh(db_user_skill)
-    return db_user_skill
+    
+    # Return a dictionary with all required fields
+    return {
+        "user_id": user_id,
+        "skill_id": skill_id,
+        "type": skill_type,
+        "skill_name": skill.skill_name
+    }
 
 def get_user_skills(db: Session, user_id: int) -> tuple[List[models.Skill], List[models.Skill]]:
     teaching_skills = db.query(models.Skill).join(models.UserSkill).filter(
@@ -120,77 +132,70 @@ def get_user_skill(db: Session, user_id: int, skill_id: int) -> Optional[models.
 
 def find_potential_matches(db: Session, user_id: int) -> List[Dict[str, Any]]:
     """Find potential skill trade matches for a user based on strict skill swapping."""
+    # Get the user's teaching and learning skills
+    user_teaching, user_learning = get_user_skills(db, user_id)
     
-    # Get the user's teaching & learning skills
-    user = db.query(models.User).filter(models.User.user_id == user_id).first()
-    if not user:
-        return []
-
-    # Get user's teaching and learning skills
-    teaching_skills, learning_skills = get_user_skills(db, user_id)
-    teaching_skill_ids = [skill.skill_id for skill in teaching_skills]
-    learning_skill_ids = [skill.skill_id for skill in learning_skills]
-
-    # Create aliases for UserSkill to avoid join conflicts
-    teach_alias = aliased(models.UserSkill)
-    learn_alias = aliased(models.UserSkill)
-
-    # Find potential matches with proper table aliasing
-    potential_matches = (
-        db.query(models.User)
-        .join(teach_alias, teach_alias.user_id == models.User.user_id)
-        .filter(
-            teach_alias.skill_id.in_(learning_skill_ids),
-            teach_alias.type == 'teach'  # Use string literal instead of enum
-        )
-        .join(learn_alias, learn_alias.user_id == models.User.user_id)
-        .filter(
-            learn_alias.skill_id.in_(teaching_skill_ids),
-            learn_alias.type == 'learn'  # Use string literal instead of enum
-        )
-        .filter(models.User.user_id != user_id)
-        .distinct()
-        .all()
-    )
-
+    # Convert skills to sets of names for easier matching
+    user_teaching_names = {skill.skill_name for skill in user_teaching}
+    user_learning_names = {skill.skill_name for skill in user_learning}
+    
+    # Get all users except the current user
+    potential_matches = db.query(models.User).filter(
+        models.User.user_id != user_id
+    ).all()
+    
     matches = []
+    
     for match_user in potential_matches:
         # Get match's teaching and learning skills
         match_teaching, match_learning = get_user_skills(db, match_user.user_id)
         
-        # Create or get existing match record
-        db_match = db.query(models.Match).filter(
-            or_(
-                and_(
-                    models.Match.user1_id == user_id,
-                    models.Match.user2_id == match_user.user_id
-                ),
-                and_(
-                    models.Match.user1_id == match_user.user_id,
-                    models.Match.user2_id == user_id
-                )
-            )
-        ).first()
-
-        if not db_match:
-            db_match = models.Match(
-                user1_id=user_id,
-                user2_id=match_user.user_id,
-                match_status=models.MatchStatus.PENDING
-            )
-            db.add(db_match)
-            db.commit()
-            db.refresh(db_match)
+        # Convert match's skills to sets of names
+        match_teaching_names = {skill.skill_name for skill in match_teaching}
+        match_learning_names = {skill.skill_name for skill in match_learning}
         
-        matches.append({
-            "match_id": db_match.match_id,
-            "user_id": match_user.user_id,
-            "username": match_user.username,
-            "teaching": [skill.skill_name for skill in match_teaching],
-            "learning": [skill.skill_name for skill in match_learning],
-            "rating": match_user.rating,
-            "match_status": db_match.match_status
-        })
+        # Check if there's at least one skill match in BOTH directions:
+        # User can teach something the match wants to learn AND
+        # Match can teach something the user wants to learn
+        user_can_teach = bool(user_teaching_names & match_learning_names)
+        match_can_teach = bool(match_teaching_names & user_learning_names)
+        
+        if user_can_teach and match_can_teach:
+            # Create or get existing match record
+            db_match = db.query(models.Match).filter(
+                or_(
+                    and_(
+                        models.Match.user1_id == user_id,
+                        models.Match.user2_id == match_user.user_id
+                    ),
+                    and_(
+                        models.Match.user1_id == match_user.user_id,
+                        models.Match.user2_id == user_id
+                    )
+                )
+            ).first()
+
+            if not db_match:
+                db_match = models.Match(
+                    user1_id=user_id,
+                    user2_id=match_user.user_id,
+                    match_status="pending"
+                )
+                db.add(db_match)
+                db.commit()
+                db.refresh(db_match)
+            
+            matches.append({
+                "match_id": db_match.match_id,
+                "user_id": match_user.user_id,
+                "username": match_user.username,
+                "teaching": [skill.skill_name for skill in match_teaching],
+                "learning": [skill.skill_name for skill in match_learning],
+                "rating": match_user.rating,
+                "match_status": db_match.match_status,
+                "trade_request_time": db_match.trade_request_time,
+                "initiator_id": db_match.initiator_id
+            })
 
     return matches
 

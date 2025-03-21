@@ -50,6 +50,7 @@ class UserSkillOut(UserSkillBase):
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 # Response schemas
 class UserSkillsResponse(BaseModel):
@@ -64,6 +65,8 @@ class MatchResult(BaseModel):
     learning: List[str]
     rating: float
     match_status: MatchStatus
+    trade_request_time: Optional[datetime]
+    initiator_id: Optional[int] = None
 
     class Config:
         from_attributes = True

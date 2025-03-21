@@ -6,6 +6,7 @@ import LoadingSpinner from './LoadingSpinner';
 import FullPageLoader from './FullPageLoader';
 import ProfileNavBar from './ProfileNavBar';
 import ChatList from './ChatList';
+import TradeGuidelinesModal from './TradeGuidelinesModal';
 
 function ProfilePage() {
   const [userProfile, setUserProfile] = useState({
@@ -33,6 +34,8 @@ function ProfilePage() {
   const [hasRequiredSkills, setHasRequiredSkills] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
   const [matchesLoading, setMatchesLoading] = useState(false);
+  const [showTradeGuidelines, setShowTradeGuidelines] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null);
   const navigate = useNavigate();
 
   // Fetch user profile data and available skills
@@ -343,6 +346,7 @@ function ProfilePage() {
     
     setMatchesLoading(true);
     try {
+      console.log('Fetching matches...');
       const token = localStorage.getItem('token');
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/`, {
         headers: {
@@ -356,6 +360,7 @@ function ProfilePage() {
       }
 
       const matches = await response.json();
+      console.log('Received matches:', JSON.stringify(matches, null, 2));
       setSkillMatches(matches);
     } catch (error) {
       console.error('Error fetching matches:', error);
@@ -374,6 +379,72 @@ function ProfilePage() {
   const goToChat = (match) => {
     setSelectedChat(match);
     setActiveSection('chats');
+  };
+
+  // Add new function to handle trade initiation
+  const handleStartTrade = async (matchId) => {
+    try {
+      const token = localStorage.getItem('token');
+      console.log('Starting trade for match:', matchId);
+      console.log('Current user profile:', userProfile);
+      console.log('Selected match before API call:', skillMatches.find(m => m.match_id === matchId));
+      
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/${matchId}/start-trade`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to start trade');
+      }
+
+      const updatedMatch = await response.json();
+      console.log('Trade request response:', {
+        updatedMatch,
+        currentUserId: userProfile.user_id,
+        isInitiator: updatedMatch.initiator_id === userProfile.user_id,
+        matchStatus: updatedMatch.match_status
+      });
+
+      // Fetch fresh matches to ensure correct state
+      const freshMatchesResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!freshMatchesResponse.ok) {
+        throw new Error('Failed to fetch updated matches');
+      }
+
+      const freshMatches = await freshMatchesResponse.json();
+      console.log('Fresh matches after trade request:', {
+        matches: freshMatches,
+        currentUserId: userProfile.user_id,
+        relevantMatch: freshMatches.find(m => m.match_id === matchId)
+      });
+      
+      // Update state with fresh data
+      setSkillMatches(freshMatches);
+      
+      // Show appropriate message based on the action
+      if (updatedMatch.match_status?.toLowerCase() === 'pending') {
+        alert('Trade request cancelled successfully!');
+      } else {
+        alert('Trade initiated successfully!');
+      }
+      
+      setShowTradeGuidelines(false);
+      setSelectedMatch(null);
+    } catch (error) {
+      console.error('Error starting trade:', error);
+      alert(error.message || 'Failed to start trade. Please try again.');
+    }
   };
 
   if (profileLoading) {
@@ -550,44 +621,76 @@ function ProfilePage() {
                   </div>
                 ) : (
                   <div className="matches-list">
-                    {skillMatches.map(match => (
-                      <div key={match.user_id} className="match-item card mb-3">
+                    {skillMatches.map((match) => (
+                      <div key={match.match_id} className="card">
                         <div className="card-body">
-                          <h5 className="card-title">{match.username}</h5>
-                          <div className="row">
-                            <div className="col-md-6">
-                              <h6>They can teach you:</h6>
-                              <ul className="list-unstyled">
-                                {match.teaching?.map((skillName, index) => (
-                                  <li key={index} className="badge bg-primary me-2 mb-2">
-                                    {skillName}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                            <div className="col-md-6">
-                              <h6>You can teach them:</h6>
-                              <ul className="list-unstyled">
-                                {match.learning?.map((skillName, index) => (
-                                  <li key={index} className="badge bg-success me-2 mb-2">
-                                    {skillName}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
+                          <div className="d-flex justify-content-between align-items-start mb-2">
+                            <h5 className="card-title mb-0">{match.username}</h5>
+                            {match.match_status?.toUpperCase() === 'PENDING_TRADE' && (
+                              <div className={`badge ${match.initiator_id === userProfile?.user_id ? 'bg-warning' : 'bg-info'} text-dark d-flex align-items-center gap-2`}>
+                                {match.initiator_id === userProfile?.user_id ? (
+                                  <>
+                                    <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
+                                    Awaiting Response
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="badge bg-success">New</span>
+                                    This user wants to trade!
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <div className="d-flex gap-2 mt-3">
+                          <div className="skills-section">
+                            <p className="mb-2">
+                              <strong>Teaching:</strong> {match.teaching.join(', ')}
+                            </p>
+                            <p className="mb-3">
+                              <strong>Learning:</strong> {match.learning.join(', ')}
+                            </p>
+                          </div>
+                          <div className="d-flex gap-2">
+                            {match.match_status?.toUpperCase() === 'PENDING_TRADE' ? (
+                              <>
+                                {match.initiator_id === userProfile?.user_id ? (
+                                  <button 
+                                    className="btn btn-outline-danger d-flex align-items-center gap-2"
+                                    onClick={() => handleStartTrade(match.match_id)}
+                                  >
+                                    <i className="bi bi-x-circle"></i>
+                                    Cancel Trade Request
+                                  </button>
+                                ) : (
+                                  <button 
+                                    className="btn btn-success d-flex align-items-center gap-2"
+                                    onClick={() => {
+                                      setSelectedMatch(match);
+                                      setShowTradeGuidelines(true);
+                                    }}
+                                  >
+                                    <i className="bi bi-check-circle"></i>
+                                    Accept Trade Request
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <button 
+                                className="btn btn-primary d-flex align-items-center gap-2"
+                                onClick={() => {
+                                  setSelectedMatch(match);
+                                  setShowTradeGuidelines(true);
+                                }}
+                              >
+                                <i className="bi bi-arrow-right-circle"></i>
+                                Start Trade
+                              </button>
+                            )}
                             <button 
-                              className="btn btn-success"
-                              disabled
-                              title="Trading feature coming soon!"
-                            >
-                              Start Trade
-                            </button>
-                            <button 
-                              className="btn btn-primary"
+                              className="btn btn-outline-primary d-flex align-items-center gap-2"
                               onClick={() => goToChat(match)}
                             >
+                              <i className="bi bi-chat-dots"></i>
                               Go to Chat
                             </button>
                           </div>
@@ -616,6 +719,20 @@ function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Add Trade Guidelines Modal */}
+      <TradeGuidelinesModal
+        show={showTradeGuidelines}
+        onClose={() => {
+          setShowTradeGuidelines(false);
+          setSelectedMatch(null);
+        }}
+        onConfirm={() => {
+          if (selectedMatch) {
+            handleStartTrade(selectedMatch.match_id);
+          }
+        }}
+      />
 
       {/* Add Skill Modal */}
       <AddSkillModal
