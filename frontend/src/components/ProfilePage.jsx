@@ -5,6 +5,7 @@ import NoSkillsWarning from './NoSkillsWarning';
 import LoadingSpinner from './LoadingSpinner';
 import FullPageLoader from './FullPageLoader';
 import ProfileNavBar from './ProfileNavBar';
+import ChatList from './ChatList';
 
 function ProfilePage() {
   const [userProfile, setUserProfile] = useState({
@@ -370,6 +371,11 @@ function ProfilePage() {
     }
   }, [activeSection, hasRequiredSkills]);
 
+  const goToChat = (match) => {
+    setSelectedChat(match);
+    setActiveSection('chats');
+  };
+
   if (profileLoading) {
     return <FullPageLoader />;
   }
@@ -570,9 +576,21 @@ function ProfilePage() {
                               </ul>
                             </div>
                           </div>
-                          <button className="btn btn-primary mt-3">
-                            Start Chat
-                          </button>
+                          <div className="d-flex gap-2 mt-3">
+                            <button 
+                              className="btn btn-success"
+                              disabled
+                              title="Trading feature coming soon!"
+                            >
+                              Start Trade
+                            </button>
+                            <button 
+                              className="btn btn-primary"
+                              onClick={() => goToChat(match)}
+                            >
+                              Go to Chat
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -589,7 +607,10 @@ function ProfilePage() {
                 <h5 className="mb-0">Chats</h5>
               </div>
               <div className="card-body">
-                <p className="text-muted">No chats yet.</p>
+                <ChatList 
+                  selectedChat={selectedChat}
+                  onSelectChat={setSelectedChat}
+                />
               </div>
             </div>
           </div>

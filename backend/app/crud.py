@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import or_, and_
-from . import models, schemas
+from . import models
+from . import schemas
+from .enums import SkillType, TradeStatus
 from passlib.context import CryptContext
 from typing import List, Optional, Tuple, Dict, Any
 
@@ -88,12 +90,12 @@ def add_user_skill(db: Session, user_id: int, skill_id: int, skill_type: schemas
 def get_user_skills(db: Session, user_id: int) -> tuple[List[models.Skill], List[models.Skill]]:
     teaching_skills = db.query(models.Skill).join(models.UserSkill).filter(
         models.UserSkill.user_id == user_id,
-        models.UserSkill.type == schemas.SkillType.TEACH
+        models.UserSkill.type == SkillType.TEACH
     ).all()
     
     learning_skills = db.query(models.Skill).join(models.UserSkill).filter(
         models.UserSkill.user_id == user_id,
-        models.UserSkill.type == schemas.SkillType.LEARN
+        models.UserSkill.type == SkillType.LEARN
     ).all()
     
     return teaching_skills, learning_skills
@@ -139,12 +141,12 @@ def find_potential_matches(db: Session, user_id: int) -> List[Dict[str, Any]]:
         .join(teach_alias, teach_alias.user_id == models.User.user_id)
         .filter(
             teach_alias.skill_id.in_(learning_skill_ids),
-            teach_alias.type == schemas.SkillType.TEACH
+            teach_alias.type == 'teach'  # Use string literal instead of enum
         )
         .join(learn_alias, learn_alias.user_id == models.User.user_id)
         .filter(
             learn_alias.skill_id.in_(teaching_skill_ids),
-            learn_alias.type == schemas.SkillType.LEARN
+            learn_alias.type == 'learn'  # Use string literal instead of enum
         )
         .filter(models.User.user_id != user_id)
         .distinct()
@@ -152,38 +154,56 @@ def find_potential_matches(db: Session, user_id: int) -> List[Dict[str, Any]]:
     )
 
     matches = []
-    for match in potential_matches:
-        # Ensure the match does not already exist
-        existing_match = db.query(models.Match).filter(
+    for match_user in potential_matches:
+        # Get match's teaching and learning skills
+        match_teaching, match_learning = get_user_skills(db, match_user.user_id)
+        
+        # Create or get existing match record
+        db_match = db.query(models.Match).filter(
             or_(
-                and_(models.Match.user1_id == user_id, models.Match.user2_id == match.user_id),
-                and_(models.Match.user1_id == match.user_id, models.Match.user2_id == user_id)
+                and_(
+                    models.Match.user1_id == user_id,
+                    models.Match.user2_id == match_user.user_id
+                ),
+                and_(
+                    models.Match.user1_id == match_user.user_id,
+                    models.Match.user2_id == user_id
+                )
             )
         ).first()
 
-        if not existing_match:
-            new_match = models.Match(
+        if not db_match:
+            db_match = models.Match(
                 user1_id=user_id,
-                user2_id=match.user_id,
+                user2_id=match_user.user_id,
                 match_status=models.MatchStatus.PENDING
             )
-            db.add(new_match)
+            db.add(db_match)
             db.commit()
-            db.refresh(new_match)
-        else:
-            new_match = existing_match
-
-        # Get match's teaching and learning skills
-        match_teaching, match_learning = get_user_skills(db, match.user_id)
+            db.refresh(db_match)
         
         matches.append({
-            "match_id": new_match.match_id,
-            "user_id": match.user_id,
-            "username": match.username,
+            "match_id": db_match.match_id,
+            "user_id": match_user.user_id,
+            "username": match_user.username,
             "teaching": [skill.skill_name for skill in match_teaching],
             "learning": [skill.skill_name for skill in match_learning],
-            "rating": match.rating,
-            "match_status": new_match.match_status
+            "rating": match_user.rating,
+            "match_status": db_match.match_status
         })
 
     return matches
+
+def cleanup_self_trades(db: Session):
+    """Remove any trades where user1_id equals user2_id."""
+    self_trades = db.query(models.Trade).filter(
+        models.Trade.user1_id == models.Trade.user2_id
+    ).all()
+    
+    for trade in self_trades:
+        # Delete associated messages first
+        db.query(models.Chat).filter(models.Chat.trade_id == trade.trade_id).delete()
+        db.delete(trade)
+    
+    db.commit()
+    return len(self_trades)

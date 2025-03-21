@@ -1,8 +1,8 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Text, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
-import enum
+from .enums import SkillType, TradeStatus, MatchStatus
 
 Base = declarative_base()
 
@@ -42,17 +42,11 @@ class UserSkill(Base):
     
     user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
     skill_id = Column(Integer, ForeignKey("skills.skill_id"), primary_key=True)
-    type = Column(Enum('teach', 'learn', name='skill_type'), nullable=False)
+    type = Column(String, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="skills_teaching")
     skill = relationship("Skill", back_populates="user_skills")
-
-class TradeStatus(enum.Enum):
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
 
 class Trade(Base):
     __tablename__ = "trades"
@@ -68,7 +62,6 @@ class Trade(Base):
     user1 = relationship("User", foreign_keys=[user1_id], back_populates="trades_as_user1")
     user2 = relationship("User", foreign_keys=[user2_id], back_populates="trades_as_user2")
     ratings = relationship("Rating", back_populates="trade")
-    chat_messages = relationship("Chat", back_populates="trade")
     trade_history = relationship("TradeHistory", back_populates="trade")
 
 class Rating(Base):
@@ -90,13 +83,13 @@ class Chat(Base):
     __tablename__ = "chats"
     
     chat_id = Column(Integer, primary_key=True, index=True)
-    trade_id = Column(Integer, ForeignKey("trades.trade_id"), nullable=False)
+    match_id = Column(Integer, ForeignKey("matches.match_id"), nullable=False)
     sender_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     message = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
-    trade = relationship("Trade", back_populates="chat_messages")
+    match = relationship("Match", backref="chat_messages")
     sender = relationship("User", back_populates="chat_messages")
 
 class FraudFlag(Base):
@@ -120,12 +113,6 @@ class TradeHistory(Base):
     # Relationships
     user = relationship("User", back_populates="trade_history")
     trade = relationship("Trade", back_populates="trade_history")
-
-class MatchStatus(enum.Enum):
-    PENDING = "pending"
-    COMMITTED = "committed"
-    COMPLETED = "completed"
-    FLAGGED = "flagged"
 
 class Match(Base):
     __tablename__ = "matches"

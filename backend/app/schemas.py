@@ -1,7 +1,8 @@
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from enum import Enum
-from .models import MatchStatus
+from datetime import datetime
+from .enums import SkillType, MatchStatus
 
 class UserBase(BaseModel):
     username: str
@@ -36,20 +37,16 @@ class SkillOut(SkillBase):
     class Config:
         from_attributes = True
 
-class SkillType(str, Enum):
-    TEACH = "teach"
-    LEARN = "learn"
-
 class UserSkillBase(BaseModel):
     skill_id: int
-    type: SkillType
+    type: str
 
 class UserSkillCreate(UserSkillBase):
     pass
 
 class UserSkillOut(UserSkillBase):
     user_id: int
-    skill: SkillOut
+    skill_name: str
 
     class Config:
         from_attributes = True
@@ -67,6 +64,38 @@ class MatchResult(BaseModel):
     learning: List[str]
     rating: float
     match_status: MatchStatus
+
+    class Config:
+        from_attributes = True
+
+class ChatMessageCreate(BaseModel):
+    message: str
+
+class ChatMessage(BaseModel):
+    chat_id: int
+    match_id: int
+    sender_id: int
+    message: str
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+class UserBasicInfo(BaseModel):
+    user_id: int
+    username: str
+
+class LastMessage(BaseModel):
+    message: str
+    timestamp: datetime
+    sender_id: int
+
+class MatchWithMessages(BaseModel):
+    match_id: int
+    match_status: MatchStatus
+    created_at: datetime
+    other_user: UserBasicInfo
+    last_message: Optional[LastMessage]
 
     class Config:
         from_attributes = True

@@ -5,15 +5,16 @@
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
-from datetime import timedelta
+from datetime import timedelta, datetime
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from . import models, schemas, crud
 from .db import SessionLocal, engine
 from .auth import create_access_token, pwd_context, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
 
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import or_, and_
 
 app = FastAPI()
 
@@ -181,6 +182,171 @@ async def get_potential_matches(
     """
     Retrieve potential skill trade matches for the current user.
     Returns a list of users who have matching skills for trading.
+    Each match includes chat functionality by default.
     """
     matches = crud.find_potential_matches(db, current_user.user_id)
     return matches
+
+@app.get("/matches/active", response_model=List[schemas.MatchWithMessages], tags=["Matching"])
+async def get_active_matches(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all active matches for the current user."""
+    matches = db.query(models.Match).filter(
+        or_(
+            models.Match.user1_id == current_user.user_id,
+            models.Match.user2_id == current_user.user_id
+        )
+    ).all()
+
+    result = []
+    for match in matches:
+        # Get the other user in the match
+        other_user = match.user2 if match.user1_id == current_user.user_id else match.user1
+        
+        # Get the last message in the match
+        last_message = db.query(models.Chat).filter(
+            models.Chat.match_id == match.match_id
+        ).order_by(models.Chat.timestamp.desc()).first()
+
+        result.append({
+            "match_id": match.match_id,
+            "match_status": match.match_status,
+            "created_at": match.created_at,
+            "other_user": {
+                "user_id": other_user.user_id,
+                "username": other_user.username
+            },
+            "last_message": {
+                "message": last_message.message,
+                "timestamp": last_message.timestamp,
+                "sender_id": last_message.sender_id
+            } if last_message else None
+        })
+
+    return result
+
+@app.post("/matches/{match_id}/start-chat", response_model=schemas.MatchResult, tags=["Matching"])
+async def start_chat(
+    match_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Start a chat for a match. This marks the match as having an active chat.
+    """
+    match = db.query(models.Match).filter(
+        models.Match.match_id == match_id,
+        or_(
+            models.Match.user1_id == current_user.user_id,
+            models.Match.user2_id == current_user.user_id
+        )
+    ).first()
+
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    match.has_chat = True
+    db.commit()
+    db.refresh(match)
+
+    # Get the other user in the match
+    other_user = match.user2 if match.user1_id == current_user.user_id else match.user1
+    
+    # Get other user's teaching and learning skills
+    teaching_skills, learning_skills = crud.get_user_skills(db, other_user.user_id)
+    
+    return {
+        "match_id": match.match_id,
+        "user_id": other_user.user_id,
+        "username": other_user.username,
+        "teaching": [skill.skill_name for skill in teaching_skills],
+        "learning": [skill.skill_name for skill in learning_skills],
+        "rating": other_user.rating,
+        "match_status": match.match_status
+    }
+
+@app.get("/matches/{match_id}/messages", response_model=List[schemas.ChatMessage], tags=["Matching"])
+async def get_match_messages(
+    match_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all messages for a match."""
+    # Verify user is part of the match
+    match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    if match.user1_id != current_user.user_id and match.user2_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view these messages")
+
+    messages = db.query(models.Chat).filter(
+        models.Chat.match_id == match_id
+    ).order_by(models.Chat.timestamp.asc()).all()
+
+    return messages
+
+@app.post("/matches/{match_id}/messages", response_model=schemas.ChatMessage, tags=["Matching"])
+async def create_message(
+    match_id: int,
+    message: schemas.ChatMessageCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new message in a match."""
+    # Verify user is part of the match
+    match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    if match.user1_id != current_user.user_id and match.user2_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to send messages in this match")
+
+    db_message = models.Chat(
+        match_id=match_id,
+        sender_id=current_user.user_id,
+        message=message.message
+    )
+    db.add(db_message)
+    db.commit()
+    db.refresh(db_message)
+    return db_message
+
+@app.delete("/matches/{match_id}", tags=["Matching"])
+async def delete_match(
+    match_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a match and its associated messages."""
+    # Verify user is part of the match
+    match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    if match.user1_id != current_user.user_id and match.user2_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this match")
+
+    # Delete associated messages first
+    db.query(models.Chat).filter(models.Chat.match_id == match_id).delete()
+    
+    # Delete the match
+    db.delete(match)
+    db.commit()
+    
+    return {"message": "Match deleted successfully"}
+
+@app.delete("/matches/cleanup", tags=["Development"])
+async def cleanup_matches(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Development endpoint to clean up all matches."""
+    # Delete all chat messages first
+    db.query(models.Chat).delete()
+    # Then delete all matches
+    db.query(models.Match).delete()
+    db.commit()
+    return {"message": "All matches and associated messages have been deleted"}
