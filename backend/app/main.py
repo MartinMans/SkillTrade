@@ -28,6 +28,7 @@ origins = [
     "http://localhost:3000",  # React dev server
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
+    "https://skill-trade-steel.vercel.app",  # The correct production frontend
 ]
 
 app.add_middleware(
