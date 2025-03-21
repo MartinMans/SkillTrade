@@ -28,20 +28,28 @@ origins = [
     "http://localhost:3000",  # React dev server
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
-    "https://skill-trade-steel.vercel.app",  # The production frontend
+    "https://skill-trade-steel.vercel.app",  # Production frontend
 ]
 
-# Add any Vercel preview URLs
-if os.getenv('ALLOW_VERCEL_PREVIEWS', 'true').lower() == 'true':
-    origins.extend([
-        "https://skill-trade-54nxw0gbg-martins-projects-55e3a28b.vercel.app",
-        "https://skill-trade-au16z1rqj-martins-projects-55e3a28b.vercel.app",
-        "https://*.vercel.app"  # This will allow all Vercel preview URLs
-    ])
+def get_allowed_origins():
+    allowed_origins = origins.copy()
+    # Allow all Vercel preview URLs for your project
+    if os.getenv('ALLOW_VERCEL_PREVIEWS', 'true').lower() == 'true':
+        allowed_origins.append("https://skill-trade-steel.vercel.app")  # Production
+        # Add pattern matching for Vercel preview URLs
+        from fastapi.middleware.cors import CORSMiddleware
+        class VercelURLPattern:
+            def __eq__(self, other):
+                return isinstance(other, str) and (
+                    other.startswith("https://skill-trade-") and 
+                    other.endswith(".vercel.app")
+                )
+        allowed_origins.append(VercelURLPattern())
+    return allowed_origins
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
