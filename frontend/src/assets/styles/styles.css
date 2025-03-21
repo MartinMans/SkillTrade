@@ -1075,4 +1075,66 @@ h1 {
   color: #ef4444;
   background-color: #fee2e2;
   transform: scale(1.1);
+}
+
+/* Trade Interface Styles */
+.trade-interface {
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.trade-participants {
+  background-color: #f8fafc;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+}
+
+.trade-arrow {
+  color: #6b7280;
+  margin: 0 1.5rem;
+}
+
+.participant {
+  text-align: center;
+}
+
+.progress-grid {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.progress-item {
+  background-color: #f8fafc;
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.progress {
+  height: 0.5rem;
+  background-color: #e5e7eb;
+}
+
+.progress-bar {
+  transition: width 0.3s ease-in-out;
+}
+
+.trade-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.trade-actions button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.trade-actions button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 } 

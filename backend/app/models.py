@@ -23,7 +23,7 @@ class User(Base):
     ratings_received = relationship("Rating", back_populates="rated_user", foreign_keys="Rating.rated_user_id")
     chat_messages = relationship("Chat", back_populates="sender")
     fraud_flags = relationship("FraudFlag", back_populates="user")
-    trade_history = relationship("TradeHistory", back_populates="user")
+    trade_history = relationship("TradeHistory", back_populates="user", foreign_keys="TradeHistory.user_id")
     matches_as_user1 = relationship("Match", foreign_keys="Match.user1_id", back_populates="user1")
     matches_as_user2 = relationship("Match", foreign_keys="Match.user2_id", back_populates="user2")
 
@@ -55,6 +55,12 @@ class Trade(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     status = Column(String, default="active", nullable=False)
+    user1_skill = Column(String, nullable=False)
+    user2_skill = Column(String, nullable=False)
+    user1_teaching_done = Column(Boolean, default=False, nullable=False)
+    user1_learning_done = Column(Boolean, default=False, nullable=False)
+    user2_teaching_done = Column(Boolean, default=False, nullable=False)
+    user2_learning_done = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     match = relationship("Match", back_populates="trade")
@@ -106,9 +112,16 @@ class TradeHistory(Base):
     history_id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     trade_id = Column(Integer, ForeignKey("trades.trade_id"), nullable=False)
+    completed_at = Column(DateTime, nullable=False)
+    user1_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user2_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user1_taught = Column(String, nullable=False)
+    user2_taught = Column(String, nullable=False)
 
     # Relationships
-    user = relationship("User", back_populates="trade_history")
+    user = relationship("User", back_populates="trade_history", foreign_keys=[user_id])
+    user1 = relationship("User", foreign_keys=[user1_id])
+    user2 = relationship("User", foreign_keys=[user2_id])
     trade = relationship("Trade", back_populates="trade_history")
 
 class MatchStatus(str, enum.Enum):

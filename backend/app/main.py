@@ -390,6 +390,7 @@ async def start_trade(
     db: Session = Depends(get_db)
 ):
     try:
+        print(f"Starting trade for match {match_id}")
         match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
         if not match:
             raise HTTPException(status_code=404, detail="Match not found")
@@ -401,8 +402,19 @@ async def start_trade(
         # Get the other user in the match
         other_user = match.user2 if match.user1_id == current_user.user_id else match.user1
         
-        # Get other user's teaching and learning skills
-        teaching_skills, learning_skills = crud.get_user_skills(db, other_user.user_id)
+        # Get both users' teaching and learning skills
+        user1_teaching_skills, user1_learning_skills = crud.get_user_skills(db, match.user1_id)
+        user2_teaching_skills, user2_learning_skills = crud.get_user_skills(db, match.user2_id)
+        
+        print(f"User1 teaching skills: {[skill.skill_name for skill in user1_teaching_skills]}")
+        print(f"User2 teaching skills: {[skill.skill_name for skill in user2_teaching_skills]}")
+        
+        # Get the first teaching skill for each user
+        user1_teaching = user1_teaching_skills[0].skill_name if user1_teaching_skills else ""
+        user2_teaching = user2_teaching_skills[0].skill_name if user2_teaching_skills else ""
+        
+        print(f"User1 teaching skill: {user1_teaching}")
+        print(f"User2 teaching skill: {user2_teaching}")
 
         # If there's a pending trade request that's over 24 hours old, clear it
         if (match.match_status == "pending_trade" and match.trade_request_time and 
@@ -412,8 +424,11 @@ async def start_trade(
             match.initiator_id = None
             db.commit()
 
+        print(f"Current match status: {match.match_status}")
+
         # Handle initial trade request (from PENDING state)
         if match.match_status == "pending":
+            print("Handling initial trade request")
             match.match_status = "pending_trade"
             match.trade_request_time = datetime.utcnow()
             match.initiator_id = current_user.user_id
@@ -423,8 +438,8 @@ async def start_trade(
                 "match_id": match.match_id,
                 "user_id": other_user.user_id,
                 "username": other_user.username,
-                "teaching": [skill.skill_name for skill in teaching_skills],
-                "learning": [skill.skill_name for skill in learning_skills],
+                "teaching": [skill.skill_name for skill in user2_teaching_skills],
+                "learning": [skill.skill_name for skill in user2_learning_skills],
                 "rating": other_user.rating,
                 "match_status": match.match_status,
                 "trade_request_time": match.trade_request_time,
@@ -434,6 +449,7 @@ async def start_trade(
         # If user is canceling their trade request
         if match.match_status == "pending_trade":
             if current_user.user_id == match.initiator_id:
+                print("Canceling trade request")
                 match.match_status = "pending"
                 match.trade_request_time = None
                 match.initiator_id = None
@@ -443,26 +459,36 @@ async def start_trade(
         if match.match_status == "pending_trade":
             # Check if this is the other user accepting
             if current_user.user_id != match.initiator_id:
-                # Create new trade
+                print("Second user accepting trade")
+                print(f"Creating trade with user1_skill={user1_teaching}, user2_skill={user2_teaching}")
+                # Create new trade with the skills being traded
                 trade = models.Trade(
                     match_id=match.match_id,
-                    status="in_progress"
+                    status="active",
+                    user1_skill=user1_teaching,
+                    user2_skill=user2_teaching
                 )
                 db.add(trade)
                 match.match_status = "in_trade"
                 match.trade_request_time = None
                 match.initiator_id = None
-                db.commit()
+                try:
+                    db.commit()
+                    print("Successfully created trade")
+                except Exception as e:
+                    print(f"Error creating trade: {str(e)}")
+                    db.rollback()
+                    raise
 
-        db.refresh(match)  # Refresh to ensure we have the latest state
+        db.refresh(match)
 
         # Return the match result with updated status
         return {
             "match_id": match.match_id,
             "user_id": other_user.user_id,
             "username": other_user.username,
-            "teaching": [skill.skill_name for skill in teaching_skills],
-            "learning": [skill.skill_name for skill in learning_skills],
+            "teaching": [skill.skill_name for skill in user2_teaching_skills],
+            "learning": [skill.skill_name for skill in user2_learning_skills],
             "rating": other_user.rating,
             "match_status": match.match_status,
             "trade_request_time": match.trade_request_time,
@@ -470,6 +496,7 @@ async def start_trade(
         }
     except Exception as e:
         db.rollback()
+        print(f"Error in start_trade: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/matches/{match_id}/trade-status", tags=["Matching"])
@@ -506,3 +533,186 @@ async def get_trade_status(
         "ready_at": match.ready_at,
         "trade": match.trade.status if match.trade else None
     }
+
+@app.get("/trades/{match_id}/status", response_model=schemas.TradeStatus, tags=["Trading"])
+async def get_trade_status(
+    match_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the current status of a trade, including completion status for both users."""
+    try:
+        # Get the trade record
+        trade = db.query(models.Trade).filter(models.Trade.match_id == match_id).first()
+        if not trade:
+            raise HTTPException(status_code=404, detail="Trade not found")
+
+        print(f"Trade object: user1_skill={trade.user1_skill}, user2_skill={trade.user2_skill}")
+        
+        # Get the match to verify user is part of it
+        match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+        if not match or current_user.user_id not in [match.user1_id, match.user2_id]:
+            raise HTTPException(status_code=403, detail="Not authorized to view this trade")
+
+        return {
+            "user1_teaching_done": trade.user1_teaching_done,
+            "user1_learning_done": trade.user1_learning_done,
+            "user2_teaching_done": trade.user2_teaching_done,
+            "user2_learning_done": trade.user2_learning_done,
+            "user1_skill": trade.user1_skill,
+            "user2_skill": trade.user2_skill,
+            "status": trade.status
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/trades/{match_id}/update", response_model=schemas.TradeStatus, tags=["Trading"])
+async def update_trade_status(
+    match_id: int,
+    update: schemas.TradeUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update the completion status of teaching or learning for a user in a trade."""
+    try:
+        print(f"Updating trade status for match {match_id}")
+        print(f"Update data: {update}")
+        
+        # Get the trade record
+        trade = db.query(models.Trade).filter(models.Trade.match_id == match_id).first()
+        if not trade:
+            print(f"Trade not found for match {match_id}")
+            raise HTTPException(status_code=404, detail="Trade not found")
+
+        # Get the match to verify user is part of it
+        match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+        if not match:
+            print(f"Match not found: {match_id}")
+            raise HTTPException(status_code=404, detail="Match not found")
+            
+        if current_user.user_id not in [match.user1_id, match.user2_id]:
+            print(f"User {current_user.user_id} not authorized for match {match_id}")
+            raise HTTPException(status_code=403, detail="Not authorized to update this trade")
+
+        print(f"Current user: {current_user.user_id}")
+        print(f"Match user1: {match.user1_id}, user2: {match.user2_id}")
+        print(f"Update position: {update.user_position}, type: {update.type}")
+
+        # Update the appropriate field based on user position and type
+        if update.user_position == "user1":
+            if update.type == "teaching":
+                trade.user1_teaching_done = update.completed
+                print("Updated user1 teaching status")
+            else:
+                trade.user1_learning_done = update.completed
+                print("Updated user1 learning status")
+        else:
+            if update.type == "teaching":
+                trade.user2_teaching_done = update.completed
+                print("Updated user2 teaching status")
+            else:
+                trade.user2_learning_done = update.completed
+                print("Updated user2 learning status")
+
+        db.commit()
+        db.refresh(trade)
+
+        result = {
+            "user1_teaching_done": trade.user1_teaching_done,
+            "user1_learning_done": trade.user1_learning_done,
+            "user2_teaching_done": trade.user2_teaching_done,
+            "user2_learning_done": trade.user2_learning_done,
+            "user1_skill": trade.user1_skill,
+            "user2_skill": trade.user2_skill,
+            "status": trade.status
+        }
+        print(f"Updated trade status: {result}")
+        return result
+    except Exception as e:
+        db.rollback()
+        print(f"Error updating trade status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/trades/{match_id}/complete", response_model=schemas.TradeStatus, tags=["Trading"])
+async def complete_trade(
+    match_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Complete a trade and move it to trade history."""
+    try:
+        # Get the trade record
+        trade = db.query(models.Trade).filter(models.Trade.match_id == match_id).first()
+        if not trade:
+            raise HTTPException(status_code=404, detail="Trade not found")
+
+        print(f"Trade object: user1_skill={trade.user1_skill}, user2_skill={trade.user2_skill}")
+        
+        # Get the match to verify user is part of it
+        match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+        if not match or current_user.user_id not in [match.user1_id, match.user2_id]:
+            raise HTTPException(status_code=403, detail="Not authorized to complete this trade")
+
+        # Verify all parts are complete
+        if not (trade.user1_teaching_done and trade.user1_learning_done and 
+                trade.user2_teaching_done and trade.user2_learning_done):
+            raise HTTPException(status_code=400, detail="Cannot complete trade until all parts are marked complete")
+
+        # Update trade status and completion time
+        trade.status = "completed"
+        trade.completed_at = datetime.utcnow()
+
+        # Create trade history record
+        trade_history = models.TradeHistory(
+            trade_id=trade.trade_id,
+            user_id=current_user.user_id,
+            user1_id=match.user1_id,
+            user2_id=match.user2_id,
+            completed_at=trade.completed_at,
+            user1_taught=trade.user1_skill,
+            user2_taught=trade.user2_skill
+        )
+        db.add(trade_history)
+
+        # Update match status
+        match.match_status = "completed"
+
+        db.commit()
+
+        return {
+            "user1_teaching_done": trade.user1_teaching_done,
+            "user1_learning_done": trade.user1_learning_done,
+            "user2_teaching_done": trade.user2_teaching_done,
+            "user2_learning_done": trade.user2_learning_done,
+            "user1_skill": trade.user1_skill,
+            "user2_skill": trade.user2_skill,
+            "status": trade.status
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/matches/{match_id}/trade", tags=["Trading"])
+async def get_trade_for_match(
+    match_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the trade ID for a match."""
+    try:
+        # Get the match to verify user is part of it
+        match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+        if not match or current_user.user_id not in [match.user1_id, match.user2_id]:
+            raise HTTPException(status_code=403, detail="Not authorized to view this trade")
+
+        # Get the trade record
+        trade = db.query(models.Trade).filter(models.Trade.match_id == match_id).first()
+        if not trade:
+            raise HTTPException(status_code=404, detail="Trade not found")
+
+        return {
+            "trade_id": trade.trade_id,
+            "status": trade.status
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

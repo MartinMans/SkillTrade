@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { OverlayTrigger, Tooltip } from 'react-bootstrap';
 import AddSkillModal from './AddSkillModal';
 import NoSkillsWarning from './NoSkillsWarning';
 import LoadingSpinner from './LoadingSpinner';
@@ -7,6 +8,7 @@ import FullPageLoader from './FullPageLoader';
 import ProfileNavBar from './ProfileNavBar';
 import ChatList from './ChatList';
 import TradeGuidelinesModal from './TradeGuidelinesModal';
+import TradeInterface from './TradeInterface';
 
 function ProfilePage() {
   const [userProfile, setUserProfile] = useState({
@@ -447,6 +449,11 @@ function ProfilePage() {
     }
   };
 
+  // Add new function to check if user has any active trades
+  const hasActiveTrade = () => {
+    return skillMatches.some(match => match.match_status?.toUpperCase() === 'IN_TRADE');
+  };
+
   if (profileLoading) {
     return <FullPageLoader />;
   }
@@ -624,76 +631,106 @@ function ProfilePage() {
                     {skillMatches.map((match) => (
                       <div key={match.match_id} className="card">
                         <div className="card-body">
-                          <div className="d-flex justify-content-between align-items-start mb-2">
-                            <h5 className="card-title mb-0">{match.username}</h5>
-                            {match.match_status?.toUpperCase() === 'PENDING_TRADE' && (
-                              <div className={`badge ${match.initiator_id === userProfile?.user_id ? 'bg-warning' : 'bg-info'} text-dark d-flex align-items-center gap-2`}>
-                                {match.initiator_id === userProfile?.user_id ? (
-                                  <>
-                                    <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
-                                    Awaiting Response
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="badge bg-success">New</span>
-                                    This user wants to trade!
-                                  </>
+                          {match.match_status?.toUpperCase() === 'IN_TRADE' ? (
+                            <TradeInterface match={match} userProfile={userProfile} />
+                          ) : (
+                            <>
+                              <div className="d-flex justify-content-between align-items-start mb-2">
+                                <h5 className="card-title mb-0">{match.username}</h5>
+                                {match.match_status?.toUpperCase() === 'PENDING_TRADE' && (
+                                  <div className={`badge ${match.initiator_id === userProfile?.user_id ? 'bg-warning' : 'bg-info'} text-dark d-flex align-items-center gap-2`}>
+                                    {match.initiator_id === userProfile?.user_id ? (
+                                      <>
+                                        <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
+                                        Awaiting Response
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="badge bg-success">New</span>
+                                        This user wants to trade!
+                                      </>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                          <div className="skills-section">
-                            <p className="mb-2">
-                              <strong>Teaching:</strong> {match.teaching.join(', ')}
-                            </p>
-                            <p className="mb-3">
-                              <strong>Learning:</strong> {match.learning.join(', ')}
-                            </p>
-                          </div>
-                          <div className="d-flex gap-2">
-                            {match.match_status?.toUpperCase() === 'PENDING_TRADE' ? (
-                              <>
-                                {match.initiator_id === userProfile?.user_id ? (
-                                  <button 
-                                    className="btn btn-outline-danger d-flex align-items-center gap-2"
-                                    onClick={() => handleStartTrade(match.match_id)}
-                                  >
-                                    <i className="bi bi-x-circle"></i>
-                                    Cancel Trade Request
-                                  </button>
+                              <div className="skills-section">
+                                <p className="mb-2">
+                                  <strong>Teaching:</strong> {match.teaching.join(', ')}
+                                </p>
+                                <p className="mb-3">
+                                  <strong>Learning:</strong> {match.learning.join(', ')}
+                                </p>
+                              </div>
+                              <div className="d-flex gap-2">
+                                {match.match_status?.toUpperCase() === 'PENDING_TRADE' ? (
+                                  <>
+                                    {match.initiator_id === userProfile?.user_id ? (
+                                      <button 
+                                        className="btn btn-outline-danger d-flex align-items-center gap-2"
+                                        onClick={() => handleStartTrade(match.match_id)}
+                                      >
+                                        <i className="bi bi-x-circle"></i>
+                                        Cancel Trade Request
+                                      </button>
+                                    ) : (
+                                      <OverlayTrigger
+                                        placement="top"
+                                        overlay={
+                                          <Tooltip id={`tooltip-accept-${match.match_id}`}>
+                                            {hasActiveTrade() ? "You cannot accept a new trade while you have an active trade" : ""}
+                                          </Tooltip>
+                                        }
+                                      >
+                                        <span className="d-inline-block">
+                                          <button 
+                                            className="btn btn-success d-flex align-items-center gap-2"
+                                            onClick={() => {
+                                              setSelectedMatch(match);
+                                              setShowTradeGuidelines(true);
+                                            }}
+                                            disabled={hasActiveTrade()}
+                                          >
+                                            <i className="bi bi-check-circle"></i>
+                                            Accept Trade Request
+                                          </button>
+                                        </span>
+                                      </OverlayTrigger>
+                                    )}
+                                  </>
                                 ) : (
-                                  <button 
-                                    className="btn btn-success d-flex align-items-center gap-2"
-                                    onClick={() => {
-                                      setSelectedMatch(match);
-                                      setShowTradeGuidelines(true);
-                                    }}
+                                  <OverlayTrigger
+                                    placement="top"
+                                    overlay={
+                                      <Tooltip id={`tooltip-start-${match.match_id}`}>
+                                        {hasActiveTrade() ? "You cannot start a new trade while you have an active trade" : ""}
+                                      </Tooltip>
+                                    }
                                   >
-                                    <i className="bi bi-check-circle"></i>
-                                    Accept Trade Request
-                                  </button>
+                                    <span className="d-inline-block">
+                                      <button 
+                                        className="btn btn-primary d-flex align-items-center gap-2"
+                                        onClick={() => {
+                                          setSelectedMatch(match);
+                                          setShowTradeGuidelines(true);
+                                        }}
+                                        disabled={hasActiveTrade()}
+                                      >
+                                        <i className="bi bi-arrow-right-circle"></i>
+                                        Start Trade
+                                      </button>
+                                    </span>
+                                  </OverlayTrigger>
                                 )}
-                              </>
-                            ) : (
-                              <button 
-                                className="btn btn-primary d-flex align-items-center gap-2"
-                                onClick={() => {
-                                  setSelectedMatch(match);
-                                  setShowTradeGuidelines(true);
-                                }}
-                              >
-                                <i className="bi bi-arrow-right-circle"></i>
-                                Start Trade
-                              </button>
-                            )}
-                            <button 
-                              className="btn btn-outline-primary d-flex align-items-center gap-2"
-                              onClick={() => goToChat(match)}
-                            >
-                              <i className="bi bi-chat-dots"></i>
-                              Go to Chat
-                            </button>
-                          </div>
+                                <button 
+                                  className="btn btn-outline-primary d-flex align-items-center gap-2"
+                                  onClick={() => goToChat(match)}
+                                >
+                                  <i className="bi bi-chat-dots"></i>
+                                  Go to Chat
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -102,3 +102,17 @@ class MatchWithMessages(BaseModel):
 
     class Config:
         from_attributes = True
+
+class TradeStatus(BaseModel):
+    user1_teaching_done: bool
+    user1_learning_done: bool
+    user2_teaching_done: bool
+    user2_learning_done: bool
+    user1_skill: str
+    user2_skill: str
+    status: str
+
+class TradeUpdate(BaseModel):
+    type: str  # 'teaching' or 'learning'
+    user_position: str  # 'user1' or 'user2'
+    completed: bool
