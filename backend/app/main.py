@@ -28,9 +28,16 @@ origins = [
     "http://localhost:3000",  # React dev server
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
-    "https://skill-trade-steel.vercel.app",  # The old production frontend
-    "https://skill-trade-54nxw0gbg-martins-projects-55e3a28b.vercel.app"  # The new production frontend
+    "https://skill-trade-steel.vercel.app",  # The production frontend
 ]
+
+# Add any Vercel preview URLs
+if os.getenv('ALLOW_VERCEL_PREVIEWS', 'true').lower() == 'true':
+    origins.extend([
+        "https://skill-trade-54nxw0gbg-martins-projects-55e3a28b.vercel.app",
+        "https://skill-trade-au16z1rqj-martins-projects-55e3a28b.vercel.app",
+        "https://*.vercel.app"  # This will allow all Vercel preview URLs
+    ])
 
 app.add_middleware(
     CORSMiddleware,
