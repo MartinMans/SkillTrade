@@ -3,6 +3,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from sqlalchemy.ext.declarative import declarative_base
 
 # Load environment variables
 load_dotenv()
@@ -17,16 +18,28 @@ DATA_DIR.mkdir(exist_ok=True)
 # Get database URL from environment variable, with SQLite as default
 default_db_path = DATA_DIR / "app.db"
 default_db_url = f"sqlite:///{default_db_path}"
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", default_db_url)
+DATABASE_URL = os.getenv("DATABASE_URL", default_db_url)
 
-# Create engine with proper configuration for SQLite
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    # These arguments are needed for SQLite to work properly with SQLAlchemy
-    connect_args={"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
-)
+if not DATABASE_URL:
+    raise Exception("❌ DATABASE_URL environment variable is not set!")
+
+try:
+    # Handle special case for PostgreSQL URLs from Railway
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    
+    # Create engine with echo=True for SQL logging
+    engine = create_engine(DATABASE_URL, echo=True)
+    
+    # Test the connection
+    with engine.connect() as conn:
+        print(f"✅ Successfully connected to database")
+except Exception as e:
+    print(f"❌ Database connection failed: {str(e)}")
+    raise e
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
 def get_db():
     db = SessionLocal()
