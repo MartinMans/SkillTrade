@@ -68,3 +68,6 @@ frontend/.env
 *.sqlite3
 backend/data/*.db
 !backend/data/.gitkeep
+
+.env.development
+.env.production

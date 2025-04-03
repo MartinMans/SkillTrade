@@ -1,8 +1,10 @@
 # pip install -r requirements.txt
 # .\venv\Scripts\activate
+# $env:DEVELOPMENT_MODE = "true"
 # uvicorn app.main:app --reload
 # http://127.0.0.1:8000/docs
 
+import logging
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from datetime import timedelta, datetime
@@ -13,6 +15,7 @@ from sqlalchemy import or_, and_
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from dotenv import load_dotenv
 import os
 
 from . import models, schemas, crud
@@ -20,10 +23,33 @@ from .db import SessionLocal, engine
 from .auth import create_access_token, pwd_context, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
 from .reset_trades import reset_trades
 
-app = FastAPI()
+# Configure logging - only show WARNING and above
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(levelname)s: %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
 
-print("DATABASE_URL:", os.getenv("DATABASE_URL"))
+# Disable SQLAlchemy logging completely
+logging.getLogger('sqlalchemy.engine').setLevel(logging.ERROR)
 
+# Default to .env.production if no override
+env_file = os.getenv("ENV_FILE", ".env.production")
+load_dotenv(env_file)
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
+API_V1_STR = os.getenv("API_V1_STR", "/api/v1")
+
+app = FastAPI(
+    title="SkillTrade API",
+    description="API for the SkillTrade application",
+    version="1.0.0",
+    root_path=API_V1_STR
+)
 
 # Configure CORS with more specific settings
 origins = [
@@ -975,6 +1001,59 @@ async def submit_rating(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/trades/{match_id}/report-issue", response_model=schemas.IssueReportResponse, tags=["Trading"])
+async def report_issue(
+    match_id: int,
+    issue: schemas.IssueReport,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Report an issue with a trade."""
+    try:
+        # Get the trade associated with this match
+        trade = db.query(models.Trade).filter(models.Trade.match_id == match_id).first()
+        if not trade:
+            raise HTTPException(status_code=404, detail="Trade not found")
+        
+        # Get the match to verify user is part of this trade
+        match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
+        if not match or current_user.user_id not in [match.user1_id, match.user2_id]:
+            raise HTTPException(status_code=403, detail="Not authorized to report issues for this trade")
+        
+        # Check if trade is already reported
+        if trade.status == "reported":
+            raise HTTPException(status_code=400, detail="Trade has already been reported")
+        
+        # Create the fraud flag
+        fraud_flag = models.FraudFlag(
+            user_id=current_user.user_id,
+            trade_id=trade.trade_id,
+            description=issue.description
+        )
+        db.add(fraud_flag)
+        
+        # Update trade status and completion time
+        trade.status = "reported"
+        trade.completed_at = datetime.utcnow()
+        
+        # Update match status to completed
+        match.match_status = "completed"
+        
+        try:
+            db.commit()
+            db.refresh(fraud_flag)
+            return fraud_flag
+        except Exception as e:
+            db.rollback()
+            print(f"Database error in report_issue: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to save issue report")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in report_issue: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/matches/{match_id}/trade", tags=["Trading"])
 async def get_trade_for_match(
     match_id: int,
@@ -1015,3 +1094,69 @@ async def reset_all_trades(
         return {"message": "Successfully reset all trades and related data"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/matches/potential")
+def get_potential_matches(current_user: models.User = Depends(get_current_user)):
+    try:
+        # Get all matches for the current user
+        matches = db.query(models.Match).filter(
+            or_(
+                models.Match.user1_id == current_user.user_id,
+                models.Match.user2_id == current_user.user_id
+            )
+        ).all()
+
+        # Get all trades for the current user
+        user_trades = db.query(models.Trade).filter(
+            or_(
+                models.Trade.user1_id == current_user.user_id,
+                models.Trade.user2_id == current_user.user_id
+            )
+        ).all()
+
+        # Create a set of match_ids that have completed or reported trades
+        completed_match_ids = {
+            trade.match_id for trade in user_trades 
+            if trade.status in ['completed', 'reported']
+        }
+
+        # Filter out matches that have completed or reported trades
+        # Also filter out matches with completed status or reported trades
+        active_matches = [
+            match for match in matches 
+            if match.match_id not in completed_match_ids 
+            and match.match_status not in ["completed", "reported"]
+            and not any(trade.status in ['completed', 'reported'] for trade in match.trades)
+        ]
+
+        # Get potential matches (users with matching skills)
+        potential_matches = []
+        for match in active_matches:
+            # Determine if current user is user1 or user2
+            is_user1 = match.user1_id == current_user.user_id
+            current_user_teaching = match.user1_teaching if is_user1 else match.user2_teaching
+            current_user_learning = match.user1_learning if is_user1 else match.user2_learning
+            other_user_teaching = match.user2_teaching if is_user1 else match.user1_teaching
+            other_user_learning = match.user2_learning if is_user1 else match.user1_learning
+
+            # Check if skills match
+            if (current_user_teaching == other_user_learning and 
+                current_user_learning == other_user_teaching):
+                # Get the other user's profile
+                other_user_id = match.user2_id if is_user1 else match.user1_id
+                other_user = db.query(models.User).filter(models.User.user_id == other_user_id).first()
+                
+                if other_user:
+                    potential_matches.append({
+                        "match_id": match.match_id,
+                        "user_id": other_user.user_id,
+                        "username": other_user.username,
+                        "teaching": other_user_teaching,
+                        "learning": other_user_learning,
+                        "rating": other_user.rating
+                    })
+
+        return potential_matches
+    except Exception as e:
+        logger.error(f"Error getting potential matches: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get potential matches")

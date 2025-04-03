@@ -130,3 +130,17 @@ class RatingResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class IssueReport(BaseModel):
+    description: str
+    trade_id: int
+
+class IssueReportResponse(BaseModel):
+    flag_id: int
+    user_id: int
+    trade_id: int
+    description: str
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True

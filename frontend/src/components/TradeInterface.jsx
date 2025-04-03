@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge } from 'react-bootstrap';
 import { Rating } from '@mui/material';
+import IssueReportModal from './IssueReportModal';
 
 const TradeInterface = ({ match, userProfile }) => {
   // Add detailed logging of the match object
@@ -19,6 +20,8 @@ const TradeInterface = ({ match, userProfile }) => {
 
   const [isCompleting, setIsCompleting] = useState(false);
   const [rating, setRating] = useState(5);
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Get the current user's teaching skill
   const currentUserTeachingSkill = userProfile.teachingSkills[0]?.skill_name;
@@ -173,6 +176,62 @@ const TradeInterface = ({ match, userProfile }) => {
     }
   };
 
+  const handleReportIssue = async (description) => {
+    try {
+      setIsSubmitting(true);
+      const token = localStorage.getItem('token');
+      
+      // First get the trade_id for this match
+      const tradeResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/${match.match_id}/trade`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!tradeResponse.ok) {
+        const error = await tradeResponse.json();
+        throw new Error(error.detail || 'Failed to get trade information');
+      }
+
+      const tradeData = await tradeResponse.json();
+      
+      // Submit the issue report
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/trades/${match.match_id}/report-issue`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          description,
+          trade_id: tradeData.trade_id
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to submit issue report');
+      }
+
+      // Show success message
+      alert('Issue reported successfully. You will be redirected to your profile.');
+      
+      // Clear any local storage or state related to the current trade
+      localStorage.removeItem('currentTrade');
+      localStorage.removeItem('currentMatch');
+      
+      // Redirect to profile
+      window.location.href = '/profile';
+    } catch (error) {
+      console.error('Error reporting issue:', error);
+      alert(error.message || 'Failed to submit issue report. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Get the current user's teaching and learning skills based on their position
   const userTeachingSkill = isUser1 ? tradeStatus.user1_skill : tradeStatus.user2_skill;
   const userLearningSkill = isUser1 ? tradeStatus.user2_skill : tradeStatus.user1_skill;
@@ -296,7 +355,10 @@ const TradeInterface = ({ match, userProfile }) => {
         </div>
 
         <div className="trade-actions mt-4">
-          <button className="btn btn-outline-danger">
+          <button 
+            className="btn btn-outline-danger"
+            onClick={() => setShowIssueModal(true)}
+          >
             <i className="bi bi-flag me-2"></i>
             Report Issue
           </button>
@@ -321,6 +383,13 @@ const TradeInterface = ({ match, userProfile }) => {
           )}
         </div>
       </Card.Body>
+
+      <IssueReportModal
+        show={showIssueModal}
+        onClose={() => setShowIssueModal(false)}
+        onSubmit={handleReportIssue}
+        matchId={match.match_id}
+      />
     </Card>
   );
 };

@@ -51,10 +51,10 @@ class Trade(Base):
     __tablename__ = "trades"
     
     trade_id = Column(Integer, primary_key=True, index=True)
-    match_id = Column(Integer, ForeignKey("matches.match_id"), nullable=False)
+    match_id = Column(Integer, ForeignKey("matches.match_id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
-    status = Column(String, default="active", nullable=False)
+    status = Column(Enum("active", "completed", "reported", "cancelled", name="tradestatus"), default="active", nullable=False)
     user1_skill = Column(String, nullable=False)
     user2_skill = Column(String, nullable=False)
     user1_teaching_done = Column(Boolean, default=False, nullable=False)
@@ -64,8 +64,9 @@ class Trade(Base):
 
     # Relationships
     match = relationship("Match", back_populates="trade")
-    ratings = relationship("Rating", back_populates="trade")
-    trade_history = relationship("TradeHistory", back_populates="trade")
+    ratings = relationship("Rating", back_populates="trade", cascade="all, delete-orphan")
+    trade_history = relationship("TradeHistory", back_populates="trade", cascade="all, delete-orphan")
+    fraud_flags = relationship("FraudFlag", back_populates="trade", cascade="all, delete-orphan")
 
 class Rating(Base):
     __tablename__ = "ratings"
@@ -100,11 +101,13 @@ class FraudFlag(Base):
     
     flag_id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    reason = Column(Text, nullable=False)
+    trade_id = Column(Integer, ForeignKey("trades.trade_id", ondelete="CASCADE"), nullable=False)
+    description = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="fraud_flags")
+    trade = relationship("Trade", back_populates="fraud_flags")
 
 class TradeHistory(Base):
     __tablename__ = "trade_history"
@@ -147,8 +150,8 @@ class Match(Base):
     # Relationships
     user1 = relationship("User", foreign_keys=[user1_id], back_populates="matches_as_user1")
     user2 = relationship("User", foreign_keys=[user2_id], back_populates="matches_as_user2")
-    chat_messages = relationship("Chat", back_populates="match")
-    trade = relationship("Trade", back_populates="match", uselist=False)
+    chat_messages = relationship("Chat", back_populates="match", cascade="all, delete-orphan")
+    trade = relationship("Trade", back_populates="match", uselist=False, cascade="all, delete-orphan")
 
     # Ensure unique pairs
     __table_args__ = (
