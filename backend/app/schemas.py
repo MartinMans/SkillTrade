@@ -130,3 +130,19 @@ class RatingResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ReportIssueCreate(BaseModel):
+    reported_user_id: int
+    match_id: int
+    message: str
+
+class ReportIssueResponse(BaseModel):
+    flag_id: int
+    reporter_id: int
+    reported_user_id: int
+    match_id: int
+    message: str
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True

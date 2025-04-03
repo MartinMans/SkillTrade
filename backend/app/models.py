@@ -22,7 +22,8 @@ class User(Base):
     ratings_given = relationship("Rating", back_populates="reviewer", foreign_keys="Rating.reviewer_id")
     ratings_received = relationship("Rating", back_populates="rated_user", foreign_keys="Rating.rated_user_id")
     chat_messages = relationship("Chat", back_populates="sender")
-    fraud_flags = relationship("FraudFlag", back_populates="user")
+    reported_issues = relationship("FraudFlag", back_populates="reporter", foreign_keys="FraudFlag.reporter_id")
+    received_reports = relationship("FraudFlag", back_populates="reported_user", foreign_keys="FraudFlag.reported_user_id")
     trade_history = relationship("TradeHistory", back_populates="user", foreign_keys="TradeHistory.user_id")
     matches_as_user1 = relationship("Match", foreign_keys="Match.user1_id", back_populates="user1")
     matches_as_user2 = relationship("Match", foreign_keys="Match.user2_id", back_populates="user2")
@@ -99,12 +100,16 @@ class FraudFlag(Base):
     __tablename__ = "fraud_flags"
     
     flag_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    reason = Column(Text, nullable=False)
+    reporter_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    reported_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    match_id = Column(Integer, ForeignKey("matches.match_id"), nullable=False)
+    message = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
-    user = relationship("User", back_populates="fraud_flags")
+    reporter = relationship("User", foreign_keys=[reporter_id], back_populates="reported_issues")
+    reported_user = relationship("User", foreign_keys=[reported_user_id], back_populates="received_reports")
+    match = relationship("Match", back_populates="fraud_flags")
 
 class TradeHistory(Base):
     __tablename__ = "trade_history"
@@ -138,7 +143,7 @@ class Match(Base):
     match_id = Column(Integer, primary_key=True, index=True)
     user1_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     user2_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    match_status = Column(Enum("pending", "accepted", "rejected", "pending_trade", "in_trade", "completed", name="matchstatus"), default="pending")
+    match_status = Column(Enum("pending", "accepted", "rejected", "pending_trade", "in_trade", "completed", "cancelled", name="matchstatus"), default="pending")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     trade_request_time = Column(DateTime, nullable=True)
     ready_at = Column(DateTime, nullable=True)
@@ -149,6 +154,7 @@ class Match(Base):
     user2 = relationship("User", foreign_keys=[user2_id], back_populates="matches_as_user2")
     chat_messages = relationship("Chat", back_populates="match")
     trade = relationship("Trade", back_populates="match", uselist=False)
+    fraud_flags = relationship("FraudFlag", back_populates="match")
 
     # Ensure unique pairs
     __table_args__ = (

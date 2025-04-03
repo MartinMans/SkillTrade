@@ -19,6 +19,7 @@ from . import models, schemas, crud
 from .db import SessionLocal, engine
 from .auth import create_access_token, pwd_context, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
 from .reset_trades import reset_trades
+from .routers import users, skills, matches, ratings, reports
 
 app = FastAPI()
 
@@ -1015,3 +1016,9 @@ async def reset_all_trades(
         return {"message": "Successfully reset all trades and related data"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+app.include_router(users.router)
+app.include_router(skills.router)
+app.include_router(matches.router)
+app.include_router(ratings.router)
+app.include_router(reports.router)
