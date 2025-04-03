@@ -41,8 +41,13 @@ load_dotenv(env_file)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 SECRET_KEY = os.getenv("SECRET_KEY")
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 API_V1_STR = os.getenv("API_V1_STR", "/api/v1")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is not set")
 
 app = FastAPI(
     title="SkillTrade API",
