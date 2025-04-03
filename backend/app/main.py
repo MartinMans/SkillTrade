@@ -146,9 +146,19 @@ def read_root():
 # Endpoint to create a new user
 @app.post("/users/", response_model=schemas.UserOut, tags=["Users"])
 def create_new_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    # Check if email is already registered
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Check if email is banned
+    banned_user = db.query(models.BannedUser).filter(models.BannedUser.email == user.email).first()
+    if banned_user:
+        raise HTTPException(
+            status_code=403,
+            detail="This email address has been banned from the platform"
+        )
+    
     return crud.create_user(db, user)
 
 # GET endpoint to retrieve a user by their ID

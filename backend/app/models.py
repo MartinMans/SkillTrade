@@ -157,3 +157,15 @@ class Match(Base):
     __table_args__ = (
         UniqueConstraint('user1_id', 'user2_id', name='unique_user_pair'),
     )
+
+class BannedUser(Base):
+    __tablename__ = "banned_users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    reason = Column(Text, nullable=False)
+    banned_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    banned_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+
+    # Relationships
+    banner = relationship("User", foreign_keys=[banned_by])
