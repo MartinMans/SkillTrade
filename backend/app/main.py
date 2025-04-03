@@ -4,6 +4,9 @@
 # uvicorn app.main:app --reload
 # http://127.0.0.1:8000/docs
 
+# Deployment configuration for Railway
+# Environment variables are managed through Railway dashboard
+
 import logging
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
