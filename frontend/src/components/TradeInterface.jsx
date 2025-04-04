@@ -4,10 +4,6 @@ import { Rating } from '@mui/material';
 import IssueReportModal from './IssueReportModal';
 
 const TradeInterface = ({ match, userProfile }) => {
-  // Add detailed logging of the match object
-  console.log('TradeInterface render - full match object:', match);
-  console.log('TradeInterface render - full userProfile:', userProfile);
-
   const [tradeStatus, setTradeStatus] = useState({
     user1_teaching_done: false,
     user1_learning_done: false,
@@ -23,30 +19,9 @@ const TradeInterface = ({ match, userProfile }) => {
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get the current user's teaching skill
   const currentUserTeachingSkill = userProfile.teachingSkills[0]?.skill_name;
-  
-  // Determine if current user is user1 based on the teaching skill
   const isUser1 = tradeStatus.user1_skill === currentUserTeachingSkill;
-
-  console.log('User position:', {
-    currentUserId: userProfile.user_id,
-    otherUserId: match.user_id,
-    currentUserTeaching: currentUserTeachingSkill,
-    user1Skill: tradeStatus.user1_skill,
-    user2Skill: tradeStatus.user2_skill,
-    isUser1
-  });
-
   const partner = match.username;
-
-  console.log('User perspective:', {
-    isUser1,
-    userProfile,
-    partner,
-    teaching: match.teaching,
-    learning: match.learning
-  });
 
   // Fetch trade status
   useEffect(() => {
@@ -65,7 +40,6 @@ const TradeInterface = ({ match, userProfile }) => {
         }
 
         const data = await response.json();
-        console.log('Received trade status:', data);
         setTradeStatus(data);
       } catch (error) {
         console.error('Error fetching trade status:', error);
@@ -91,14 +65,6 @@ const TradeInterface = ({ match, userProfile }) => {
         (isUser1 ? 'user2' : 'user1') : 
         userPosition;
 
-      console.log('Marking complete:', {
-        type,
-        userPosition: learningPosition,
-        matchId: match.match_id,
-        isUser1,
-        currentUserTeaching: currentUserTeachingSkill
-      });
-
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/trades/${match.match_id}/update`, {
         method: 'POST',
         headers: {
@@ -118,7 +84,6 @@ const TradeInterface = ({ match, userProfile }) => {
       }
 
       const data = await response.json();
-      console.log('Updated trade status:', data);
       setTradeStatus(data);
     } catch (error) {
       console.error('Error updating trade status:', error);
@@ -241,17 +206,6 @@ const TradeInterface = ({ match, userProfile }) => {
   const userLearningDone = isUser1 ? tradeStatus.user2_learning_done : tradeStatus.user1_learning_done;
   const partnerTeachingDone = isUser1 ? tradeStatus.user2_teaching_done : tradeStatus.user1_teaching_done;
   const partnerLearningDone = isUser1 ? tradeStatus.user1_learning_done : tradeStatus.user2_learning_done;
-
-  console.log('Computed values:', {
-    userTeachingSkill,
-    userLearningSkill,
-    userTeachingDone,
-    userLearningDone,
-    partnerTeachingDone,
-    partnerLearningDone,
-    rawStatus: tradeStatus,
-    userPosition: isUser1 ? 'user1' : 'user2'
-  });
 
   const allTasksComplete = 
     tradeStatus.user1_teaching_done && 

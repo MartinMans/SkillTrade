@@ -26,14 +26,16 @@ from .db import SessionLocal, engine
 from .auth import create_access_token, pwd_context, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
 from .reset_trades import reset_trades
 
-# Configure logging - only show WARNING and above
+# Configure logging
 logging.basicConfig(
-    level=logging.WARNING,
-    format='%(levelname)s: %(message)s',
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler()
     ]
 )
+
+logger = logging.getLogger(__name__)
 
 # Disable SQLAlchemy logging completely
 logging.getLogger('sqlalchemy.engine').setLevel(logging.ERROR)
@@ -99,20 +101,23 @@ models.Base.metadata.create_all(bind=engine)
 # Exception handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning(f"Validation error: {str(exc)}")
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()}
+        content={"detail": str(exc)}
     )
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.error(f"Database error: {str(exc)}")
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc)}
+        content={"detail": "Database error occurred"}
     )
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={"detail": str(exc)}
@@ -430,7 +435,7 @@ async def get_matches(
 
         return potential_matches
     except Exception as e:
-        print(f"Error in get_matches: {str(e)}")
+        logger.error(f"Error in get_matches: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/matches/active", response_model=List[schemas.MatchWithMessages], tags=["Matching"])
@@ -520,26 +525,23 @@ async def get_match_messages(
     db: Session = Depends(get_db)
 ):
     """Get all messages for a match."""
-    print(f"Fetching messages for match {match_id}")
+    logger.info(f"Fetching messages for match {match_id}")
+    
     # Verify user is part of the match
     match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
     if not match:
-        print(f"Match {match_id} not found")
+        logger.warning(f"Match {match_id} not found")
         raise HTTPException(status_code=404, detail="Match not found")
     
-    print(f"Match found. User1: {match.user1_id}, User2: {match.user2_id}, Current user: {current_user.user_id}")
     if match.user1_id != current_user.user_id and match.user2_id != current_user.user_id:
-        print(f"User {current_user.user_id} not authorized to view messages for match {match_id}")
+        logger.warning(f"User {current_user.user_id} not authorized to view messages for match {match_id}")
         raise HTTPException(status_code=403, detail="Not authorized to view these messages")
 
     messages = db.query(models.Chat).filter(
         models.Chat.match_id == match_id
     ).order_by(models.Chat.timestamp.asc()).all()
     
-    print(f"Found {len(messages)} messages")
-    for msg in messages:
-        print(f"Message: {msg.message} from user {msg.sender_id} at {msg.timestamp}")
-
+    logger.info(f"Found {len(messages)} messages for match {match_id}")
     return messages
 
 @app.post("/matches/{match_id}/messages", response_model=schemas.ChatMessage, tags=["Matching"])
@@ -550,19 +552,18 @@ async def create_message(
     db: Session = Depends(get_db)
 ):
     """Create a new message in a match."""
-    print(f"Creating new message for match {match_id}")
+    logger.info(f"Creating new message for match {match_id}")
+    
     # Verify user is part of the match
     match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
     if not match:
-        print(f"Match {match_id} not found")
+        logger.warning(f"Match {match_id} not found")
         raise HTTPException(status_code=404, detail="Match not found")
     
-    print(f"Match found. User1: {match.user1_id}, User2: {match.user2_id}, Current user: {current_user.user_id}")
     if match.user1_id != current_user.user_id and match.user2_id != current_user.user_id:
-        print(f"User {current_user.user_id} not authorized to send messages in match {match_id}")
+        logger.warning(f"User {current_user.user_id} not authorized to send messages in match {match_id}")
         raise HTTPException(status_code=403, detail="Not authorized to send messages in this match")
 
-    print(f"Creating message: {message.message}")
     db_message = models.Chat(
         match_id=match_id,
         sender_id=current_user.user_id,
@@ -572,10 +573,10 @@ async def create_message(
     try:
         db.commit()
         db.refresh(db_message)
-        print(f"Successfully created message with ID {db_message.chat_id}")
+        logger.info(f"Successfully created message with ID {db_message.chat_id}")
         return db_message
     except Exception as e:
-        print(f"Error creating message: {str(e)}")
+        logger.error(f"Error creating message: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -623,7 +624,7 @@ async def start_trade(
     db: Session = Depends(get_db)
 ):
     try:
-        print(f"Starting trade for match {match_id}")
+        logger.info(f"Starting trade for match {match_id}")
         match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
         if not match:
             raise HTTPException(status_code=404, detail="Match not found")
@@ -639,15 +640,15 @@ async def start_trade(
         user1_teaching_skills, user1_learning_skills = crud.get_user_skills(db, match.user1_id)
         user2_teaching_skills, user2_learning_skills = crud.get_user_skills(db, match.user2_id)
         
-        print(f"User1 teaching skills: {[skill.skill_name for skill in user1_teaching_skills]}")
-        print(f"User2 teaching skills: {[skill.skill_name for skill in user2_teaching_skills]}")
+        logger.info(f"User1 teaching skills: {[skill.skill_name for skill in user1_teaching_skills]}")
+        logger.info(f"User2 teaching skills: {[skill.skill_name for skill in user2_teaching_skills]}")
         
         # Get the first teaching skill for each user
         user1_teaching = user1_teaching_skills[0].skill_name if user1_teaching_skills else ""
         user2_teaching = user2_teaching_skills[0].skill_name if user2_teaching_skills else ""
         
-        print(f"User1 teaching skill: {user1_teaching}")
-        print(f"User2 teaching skill: {user2_teaching}")
+        logger.info(f"User1 teaching skill: {user1_teaching}")
+        logger.info(f"User2 teaching skill: {user2_teaching}")
 
         # If there's a pending trade request that's over 24 hours old, clear it
         if (match.match_status == "pending_trade" and match.trade_request_time and 
@@ -657,11 +658,11 @@ async def start_trade(
             match.initiator_id = None
             db.commit()
 
-        print(f"Current match status: {match.match_status}")
+        logger.info(f"Current match status: {match.match_status}")
 
         # Handle initial trade request (from PENDING state)
         if match.match_status == "pending":
-            print("Handling initial trade request")
+            logger.info("Handling initial trade request")
             match.match_status = "pending_trade"
             match.trade_request_time = datetime.utcnow()
             match.initiator_id = current_user.user_id
@@ -682,7 +683,7 @@ async def start_trade(
         # If user is canceling their trade request
         if match.match_status == "pending_trade":
             if current_user.user_id == match.initiator_id:
-                print("Canceling trade request")
+                logger.info("Canceling trade request")
                 match.match_status = "pending"
                 match.trade_request_time = None
                 match.initiator_id = None
@@ -692,8 +693,8 @@ async def start_trade(
         if match.match_status == "pending_trade":
             # Check if this is the other user accepting
             if current_user.user_id != match.initiator_id:
-                print("Second user accepting trade")
-                print(f"Creating trade with user1_skill={user1_teaching}, user2_skill={user2_teaching}")
+                logger.info("Second user accepting trade")
+                logger.info(f"Creating trade with user1_skill={user1_teaching}, user2_skill={user2_teaching}")
                 # Create new trade with the skills being traded
                 trade = models.Trade(
                     match_id=match.match_id,
@@ -707,9 +708,9 @@ async def start_trade(
                 match.initiator_id = None
                 try:
                     db.commit()
-                    print("Successfully created trade")
+                    logger.info("Successfully created trade")
                 except Exception as e:
-                    print(f"Error creating trade: {str(e)}")
+                    logger.error(f"Error creating trade: {str(e)}")
                     db.rollback()
                     raise
 
@@ -729,7 +730,7 @@ async def start_trade(
         }
     except Exception as e:
         db.rollback()
-        print(f"Error in start_trade: {str(e)}")
+        logger.error(f"Error in start_trade: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/matches/{match_id}/trade-status", tags=["Matching"])
@@ -780,7 +781,7 @@ async def get_trade_status(
         if not trade:
             raise HTTPException(status_code=404, detail="Trade not found")
 
-        print(f"Trade object: user1_skill={trade.user1_skill}, user2_skill={trade.user2_skill}")
+        logger.info(f"Trade object: user1_skill={trade.user1_skill}, user2_skill={trade.user2_skill}")
         
         # Get the match to verify user is part of it
         match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
@@ -808,44 +809,44 @@ async def update_trade_status(
 ):
     """Update the completion status of teaching or learning for a user in a trade."""
     try:
-        print(f"Updating trade status for match {match_id}")
-        print(f"Update data: {update}")
+        logger.info(f"Updating trade status for match {match_id}")
+        logger.info(f"Update data: {update}")
         
         # Get the trade record
         trade = db.query(models.Trade).filter(models.Trade.match_id == match_id).first()
         if not trade:
-            print(f"Trade not found for match {match_id}")
+            logger.warning(f"Trade not found for match {match_id}")
             raise HTTPException(status_code=404, detail="Trade not found")
 
         # Get the match to verify user is part of it
         match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
         if not match:
-            print(f"Match not found: {match_id}")
+            logger.warning(f"Match not found: {match_id}")
             raise HTTPException(status_code=404, detail="Match not found")
             
         if current_user.user_id not in [match.user1_id, match.user2_id]:
-            print(f"User {current_user.user_id} not authorized for match {match_id}")
+            logger.warning(f"User {current_user.user_id} not authorized for match {match_id}")
             raise HTTPException(status_code=403, detail="Not authorized to update this trade")
 
-        print(f"Current user: {current_user.user_id}")
-        print(f"Match user1: {match.user1_id}, user2: {match.user2_id}")
-        print(f"Update position: {update.user_position}, type: {update.type}")
+        logger.info(f"Current user: {current_user.user_id}")
+        logger.info(f"Match user1: {match.user1_id}, user2: {match.user2_id}")
+        logger.info(f"Update position: {update.user_position}, type: {update.type}")
 
         # Update the appropriate field based on user position and type
         if update.user_position == "user1":
             if update.type == "teaching":
                 trade.user1_teaching_done = update.completed
-                print("Updated user1 teaching status")
+                logger.info("Updated user1 teaching status")
             else:
                 trade.user1_learning_done = update.completed
-                print("Updated user1 learning status")
+                logger.info("Updated user1 learning status")
         else:
             if update.type == "teaching":
                 trade.user2_teaching_done = update.completed
-                print("Updated user2 teaching status")
+                logger.info("Updated user2 teaching status")
             else:
                 trade.user2_learning_done = update.completed
-                print("Updated user2 learning status")
+                logger.info("Updated user2 learning status")
 
         db.commit()
         db.refresh(trade)
@@ -859,11 +860,11 @@ async def update_trade_status(
             "user2_skill": trade.user2_skill,
             "status": trade.status
         }
-        print(f"Updated trade status: {result}")
+        logger.info(f"Updated trade status: {result}")
         return result
     except Exception as e:
         db.rollback()
-        print(f"Error updating trade status: {str(e)}")
+        logger.error(f"Error updating trade status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/trades/{match_id}/complete", response_model=schemas.TradeStatus, tags=["Trading"])
@@ -879,7 +880,7 @@ async def complete_trade(
         if not trade:
             raise HTTPException(status_code=404, detail="Trade not found")
 
-        print(f"Trade object: user1_skill={trade.user1_skill}, user2_skill={trade.user2_skill}")
+        logger.info(f"Trade object: user1_skill={trade.user1_skill}, user2_skill={trade.user2_skill}")
         
         # Get the match to verify user is part of it
         match = db.query(models.Match).filter(models.Match.match_id == match_id).first()
@@ -902,7 +903,7 @@ async def complete_trade(
 
         # If the other user has completed but not rated, automatically add a 5-star rating
         if trade.status == "completed" and not other_user_rating:
-            print(f"Adding automatic 5-star rating for user {current_user.user_id}")
+            logger.info(f"Adding automatic 5-star rating for user {current_user.user_id}")
             new_rating = models.Rating(
                 trade_id=trade.trade_id,
                 reviewer_id=current_user.user_id,
@@ -1063,13 +1064,13 @@ async def report_issue(
             return fraud_flag
         except Exception as e:
             db.rollback()
-            print(f"Database error in report_issue: {str(e)}")
+            logger.error(f"Database error in report_issue: {str(e)}")
             raise HTTPException(status_code=500, detail="Failed to save issue report")
             
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in report_issue: {str(e)}")
+        logger.error(f"Error in report_issue: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/matches/{match_id}/trade", tags=["Trading"])

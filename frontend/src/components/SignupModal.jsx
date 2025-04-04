@@ -47,7 +47,6 @@ function SignupModal({ show, onClose }) {
 
     try {
       const endpoint = isLogin ? '/login' : '/users/';
-      console.log('Making request to:', `${import.meta.env.VITE_API_BASE_URL}${endpoint}`);
       
       // For login, use application/x-www-form-urlencoded format
       const loginBody = isLogin 
@@ -61,22 +60,15 @@ function SignupModal({ show, onClose }) {
             password: formData.password
           });
 
-      console.log('Request body:', loginBody.toString());
-
       const headers = isLogin 
         ? { 'Content-Type': 'application/x-www-form-urlencoded' }
         : { 'Content-Type': 'application/json' };
-
-      console.log('Request headers:', headers);
 
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: headers,
         body: loginBody,
       });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       // Check if response is empty
       const contentType = response.headers.get('content-type');

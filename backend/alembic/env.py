@@ -5,6 +5,10 @@ from sqlalchemy import pool
 
 from alembic import context
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.models import Base
 
 # this is the Alembic Config object, which provides
@@ -75,4 +79,4 @@ def run_migrations_online() -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    run_migrations_online() 
+    run_migrations_online()

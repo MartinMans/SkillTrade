@@ -38,6 +38,7 @@ function ProfilePage() {
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [showTradeGuidelines, setShowTradeGuidelines] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   // Fetch user profile data and available skills
@@ -46,18 +47,15 @@ function ProfilePage() {
 
     const fetchData = async () => {
       try {
-        setProfileLoading(true); // Show loading screen immediately
-        console.log('Starting to fetch profile data...');
+        setProfileLoading(true);
 
         const token = localStorage.getItem('token');
-        console.log('Token from localStorage:', token ? 'Present' : 'Missing');
         
         if (!token) {
           throw new Error('No token found');
         }
 
         // Fetch all data in parallel for better performance
-        console.log('Making API requests...');
         const [userResponse, skillsResponse, availableSkillsResponse] = await Promise.all([
           // Fetch user profile
           fetch(`${import.meta.env.VITE_API_BASE_URL}/users/me`, {
@@ -88,14 +86,8 @@ function ProfilePage() {
           })
         ]);
 
-        console.log('API responses received:', {
-          user: userResponse.status,
-          skills: skillsResponse.status,
-          availableSkills: availableSkillsResponse.status
-        });
-
         if (!userResponse.ok || !skillsResponse.ok || !availableSkillsResponse.ok) {
-          throw new Error('Failed to fetch data');
+          throw new Error('Failed to fetch user data');
         }
 
         const [userData, skillsData, availableSkillsData] = await Promise.all([
@@ -104,12 +96,6 @@ function ProfilePage() {
           availableSkillsResponse.json()
         ]);
 
-        console.log('Data parsed successfully:', {
-          user: userData,
-          skills: skillsData,
-          availableSkills: availableSkillsData.length
-        });
-
         if (isMounted) {
           setUserProfile({
             ...userData,
@@ -117,34 +103,30 @@ function ProfilePage() {
             learningInterests: skillsData.learning || []
           });
           setAvailableSkills(availableSkillsData);
-          setHasSkills(
-            (skillsData.teaching?.length > 0 || skillsData.learning?.length > 0)
-          );
-          setHasRequiredSkills(
-            skillsData.teaching?.length > 0 && skillsData.learning?.length > 0
-          );
-          setProfileLoading(false);
-          console.log('Profile data set successfully');
+          
+          // Update skill status
+          const hasAnySkills = (skillsData.teaching?.length > 0 || skillsData.learning?.length > 0);
+          const hasAllRequiredSkills = (skillsData.teaching?.length > 0 && skillsData.learning?.length > 0);
+          setHasSkills(hasAnySkills);
+          setHasRequiredSkills(hasAllRequiredSkills);
         }
       } catch (error) {
-        console.error('Error fetching profile data:', error);
-        if (error.message === 'No token found') {
-          navigate('/');
+        console.error('Error fetching user data:', error);
+        if (isMounted) {
+          setError(error.message);
         }
       } finally {
         if (isMounted) {
           setProfileLoading(false);
-          console.log('Loading state set to false');
         }
       }
     };
 
     fetchData();
-
     return () => {
       isMounted = false;
     };
-  }, [navigate]);
+  }, []);
 
   // Handle skill search
   useEffect(() => {
@@ -241,11 +223,6 @@ function ProfilePage() {
 
       const updatedSkills = await skillsResponse.json();
       
-      console.log('Updated skills from server:', {
-        teaching: updatedSkills.teaching,
-        learning: updatedSkills.learning
-      });
-
       setUserProfile(prev => ({
         ...prev,
         teachingSkills: updatedSkills.teaching || [],
@@ -255,13 +232,6 @@ function ProfilePage() {
       // Update skill status flags after adding a skill
       const hasAnySkills = (updatedSkills.teaching?.length > 0 || updatedSkills.learning?.length > 0);
       const hasAllRequiredSkills = (updatedSkills.teaching?.length > 0 && updatedSkills.learning?.length > 0);
-      
-      console.log('Updating skill status:', {
-        hasAnySkills,
-        hasAllRequiredSkills,
-        teachingCount: updatedSkills.teaching?.length,
-        learningCount: updatedSkills.learning?.length
-      });
       
       setHasSkills(hasAnySkills);
       setHasRequiredSkills(hasAllRequiredSkills);
@@ -279,7 +249,6 @@ function ProfilePage() {
   // Handle removing a skill
   const handleRemoveSkill = async (skillId, skillType) => {
     try {
-      console.log('Removing skill:', { skillId, skillType });
       const token = localStorage.getItem('token');
       const response = await fetch(
         `${import.meta.env.VITE_API_BASE_URL}/users/me/skills/${skillId}`,
@@ -310,11 +279,6 @@ function ProfilePage() {
       }
 
       const updatedSkills = await skillsResponse.json();
-      
-      console.log('Skills after removal:', {
-        teaching: updatedSkills.teaching,
-        learning: updatedSkills.learning
-      });
 
       setUserProfile(prev => ({
         ...prev,
@@ -325,14 +289,6 @@ function ProfilePage() {
       // Update the hasSkills and hasRequiredSkills states
       const hasAnySkills = (updatedSkills.teaching?.length > 0 || updatedSkills.learning?.length > 0);
       const hasAllRequiredSkills = (updatedSkills.teaching?.length > 0 && updatedSkills.learning?.length > 0);
-      
-      console.log('Updating skill status after removal:', {
-        hasAnySkills,
-        hasAllRequiredSkills,
-        teachingCount: updatedSkills.teaching?.length,
-        learningCount: updatedSkills.learning?.length
-      });
-      
       setHasSkills(hasAnySkills);
       setHasRequiredSkills(hasAllRequiredSkills);
 
@@ -348,7 +304,6 @@ function ProfilePage() {
     
     setMatchesLoading(true);
     try {
-      console.log('Fetching matches...');
       const token = localStorage.getItem('token');
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/`, {
         headers: {
@@ -362,7 +317,6 @@ function ProfilePage() {
       }
 
       const matches = await response.json();
-      console.log('Received matches:', JSON.stringify(matches, null, 2));
       setSkillMatches(matches);
     } catch (error) {
       console.error('Error fetching matches:', error);
@@ -383,13 +337,10 @@ function ProfilePage() {
     setActiveSection('chats');
   };
 
-  // Add new function to handle trade initiation
+  // Handle starting a trade
   const handleStartTrade = async (matchId) => {
     try {
       const token = localStorage.getItem('token');
-      console.log('Starting trade for match:', matchId);
-      console.log('Current user profile:', userProfile);
-      console.log('Selected match before API call:', skillMatches.find(m => m.match_id === matchId));
       
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/${matchId}/start-trade`, {
         method: 'POST',
@@ -405,12 +356,6 @@ function ProfilePage() {
       }
 
       const updatedMatch = await response.json();
-      console.log('Trade request response:', {
-        updatedMatch,
-        currentUserId: userProfile.user_id,
-        isInitiator: updatedMatch.initiator_id === userProfile.user_id,
-        matchStatus: updatedMatch.match_status
-      });
 
       // Fetch fresh matches to ensure correct state
       const freshMatchesResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/`, {
@@ -425,11 +370,6 @@ function ProfilePage() {
       }
 
       const freshMatches = await freshMatchesResponse.json();
-      console.log('Fresh matches after trade request:', {
-        matches: freshMatches,
-        currentUserId: userProfile.user_id,
-        relevantMatch: freshMatches.find(m => m.match_id === matchId)
-      });
       
       // Update state with fresh data
       setSkillMatches(freshMatches);

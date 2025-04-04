@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 from sqlalchemy.ext.declarative import declarative_base
 import logging
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 # Load environment variables
 load_dotenv()
 
@@ -22,11 +25,7 @@ default_db_url = f"sqlite:///{default_db_path}"
 DATABASE_URL = os.getenv("DATABASE_URL", default_db_url)
 
 if not DATABASE_URL:
-    raise Exception("❌ DATABASE_URL environment variable is not set!")
-
-# Configure logging - only show WARNING and above
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger(__name__)
+    raise Exception("DATABASE_URL environment variable is not set!")
 
 try:
     # Handle special case for PostgreSQL URLs from Railway
@@ -39,9 +38,9 @@ try:
     # Test the connection
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    print("✅ Successfully connected to database")
+    logger.info("Successfully connected to database")
 except Exception as e:
-    print(f"❌ Failed to connect to database: {e}")
+    logger.error(f"Failed to connect to database: {e}")
     raise
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
