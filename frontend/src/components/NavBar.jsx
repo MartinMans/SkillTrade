@@ -42,7 +42,7 @@ function NavBar() {
 
   const handleAuthClick = () => {
     if (isAuthenticated) {
-      navigate('/profile');
+      navigate('/dashboard');
     } else {
       setShowAuthModal(true);
     }

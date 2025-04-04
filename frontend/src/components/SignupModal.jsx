@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ProfilePage from './ProfilePage';
+import Dashboard from './Dashboard';
 
 function SignupModal({ show, onClose }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -93,10 +93,10 @@ function SignupModal({ show, onClose }) {
         // Emit a custom event to notify that login was successful
         window.dispatchEvent(new CustomEvent('loginStateChanged', { detail: { isLoggedIn: true } }));
         
-        // Close modal and redirect to profile page
+        // Close modal and redirect to dashboard page
         setTimeout(() => {
           onClose();
-          navigate('/profile');
+          navigate('/dashboard');
         }, 1500);
       } else {
         setSuccess('Account created successfully! Please log in.');

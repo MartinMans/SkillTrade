@@ -10,7 +10,7 @@ import ChatList from './ChatList';
 import TradeGuidelinesModal from './TradeGuidelinesModal';
 import TradeInterface from './TradeInterface';
 
-function ProfilePage() {
+function Dashboard() {
   const [userProfile, setUserProfile] = useState({
     username: "",
     email: "",
@@ -400,17 +400,8 @@ function ProfilePage() {
 
   return (
     <div className="profile-page">
-      <ProfileNavBar userProfile={userProfile} />
+      <ProfileNavBar />
       <div className="container">
-        {/* Profile Header */}
-        <div className="row mb-4">
-          <div className="col-12">
-            <h1>Welcome, {userProfile.username}!</h1>
-            <p className="text-muted">{userProfile.email}</p>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
         <div className="row mb-4">
           <div className="col-12">
             <ul className="nav nav-tabs" role="tablist">
@@ -729,4 +720,4 @@ function ProfilePage() {
   );
 }
 
-export default ProfilePage; 
+export default Dashboard; 
