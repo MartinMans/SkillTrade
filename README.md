@@ -167,7 +167,3 @@ The frontend will be available at: http://localhost:5173
 1. Create a new branch for your feature
 2. Make your changes
 3. Submit a pull request
-
-## License
-
-[Add your license here]
