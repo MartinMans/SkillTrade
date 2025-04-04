@@ -12,10 +12,15 @@ class User(Base):
     
     user_id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     rating = Column(Float, default=0)
     trade_token = Column(Integer, default=1)
+    
+    # Profile fields
+    photo = Column(String, nullable=True)  # URL or base64 of the profile photo
+    location = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
 
     # Relationships
     skills_teaching = relationship("UserSkill", back_populates="user", foreign_keys="UserSkill.user_id")

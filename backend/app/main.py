@@ -24,7 +24,7 @@ import os
 from . import models, schemas, crud
 from .db import SessionLocal, engine
 from .auth import create_access_token, pwd_context, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
-from .reset_trades import reset_trades
+from .reset_trades import reset_trades, reset_all_tables
 
 # Configure logging
 logging.basicConfig(
@@ -151,11 +151,6 @@ def read_root():
 # Endpoint to create a new user
 @app.post("/users/", response_model=schemas.UserOut, tags=["Users"])
 def create_new_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    # Check if email is already registered
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
     # Check if email is banned
     banned_user = db.query(models.BannedUser).filter(models.BannedUser.email == user.email).first()
     if banned_user:
@@ -277,6 +272,21 @@ async def read_current_user(current_user: models.User = Depends(get_current_user
     """Get the current user's profile."""
     return current_user
 
+@app.put("/users/me/profile", response_model=schemas.UserOut, tags=["Users"])
+async def update_current_user_profile(
+    profile_data: schemas.UserProfileUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update the current user's profile information."""
+    try:
+        updated_user = crud.update_user_profile(db, current_user.user_id, profile_data)
+        if not updated_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return updated_user
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/matches/", response_model=List[schemas.MatchResult], tags=["Matching"])
 async def get_matches(
     current_user: models.User = Depends(get_current_user),
@@ -284,159 +294,66 @@ async def get_matches(
 ):
     """Get all potential skill matches for the current user."""
     try:
-        # Get the user's teaching and learning skills
-        user_skills = db.query(models.UserSkill).filter(
-            models.UserSkill.user_id == current_user.user_id
-        ).all()
-
-        teaching_skills = [skill.skill_id for skill in user_skills if skill.type == 'teach']
-        learning_skills = [skill.skill_id for skill in user_skills if skill.type == 'learn']
-
-        # Get completed trades for the current user
-        completed_trades = db.query(models.TradeHistory).filter(
+        # First, find and create potential matches based on complementary skills
+        potential_matches = crud.find_potential_matches(db, current_user.user_id)
+        
+        # Then get all matches for the current user
+        matches = db.query(models.Match).filter(
             or_(
-                models.TradeHistory.user1_id == current_user.user_id,
-                models.TradeHistory.user2_id == current_user.user_id
+                models.Match.user1_id == current_user.user_id,
+                models.Match.user2_id == current_user.user_id
             )
         ).all()
 
-        # Create a set of (user_id, taught_skill, learned_skill) tuples for completed trades
-        completed_trade_combinations = set()
-        for trade in completed_trades:
-            if trade.user1_id == current_user.user_id:
-                completed_trade_combinations.add((trade.user2_id, trade.user1_taught, trade.user2_taught))
-            else:
-                completed_trade_combinations.add((trade.user1_id, trade.user2_taught, trade.user1_taught))
-
-        # Get skill names for all skills
-        skill_id_to_name = {}
-        all_skill_ids = set()
-        for skill in user_skills:
-            all_skill_ids.add(skill.skill_id)
-        for skill in teaching_skills:
-            all_skill_ids.add(skill)
-        
-        if all_skill_ids:
-            skill_records = db.query(models.Skill).filter(
-                models.Skill.skill_id.in_(all_skill_ids)
-            ).all()
-            skill_id_to_name = {skill.skill_id: skill.skill_name for skill in skill_records}
-
-        # Find potential matches excluding already completed combinations
-        potential_matches = []
-        
-        # Get all users who have matching skills
-        matching_users = db.query(models.UserSkill).filter(
-            and_(
-                models.UserSkill.user_id != current_user.user_id,
-                or_(
-                    and_(
-                        models.UserSkill.skill_id.in_(learning_skills),
-                        models.UserSkill.type == 'teach'
-                    ),
-                    and_(
-                        models.UserSkill.skill_id.in_(teaching_skills),
-                        models.UserSkill.type == 'learn'
-                    )
-                )
-            )
+        # Get completed or reported trades
+        completed_trades = db.query(models.Trade).filter(
+            models.Trade.status.in_(['completed', 'reported'])
         ).all()
 
-        # Group users by their user_id
-        user_skill_map = {}
-        for skill in matching_users:
-            if skill.user_id not in user_skill_map:
-                user_skill_map[skill.user_id] = {'teach': [], 'learn': []}
-            user_skill_map[skill.user_id][skill.type].append(skill.skill_id)
+        # Create a set of match_ids that have completed or reported trades
+        completed_match_ids = {trade.match_id for trade in completed_trades}
 
-        # Process each potential match
-        for user_id, skills in user_skill_map.items():
-            # Find matching skill combinations
-            matching_teach = set(teaching_skills) & set(skills['learn'])
-            matching_learn = set(learning_skills) & set(skills['teach'])
+        # Filter out matches that have completed or reported trades
+        active_matches = [
+            match for match in matches 
+            if match.match_id not in completed_match_ids 
+            and match.match_status not in ["completed", "reported"]
+        ]
 
-            if matching_teach and matching_learn:  # Only proceed if there are both teaching and learning matches
-                # Get the other user's details
-                other_user = db.query(models.User).filter(
-                    models.User.user_id == user_id
-                ).first()
+        # Format matches for response
+        formatted_matches = []
+        for match in active_matches:
+            # Determine if current user is user1 or user2
+            is_user1 = match.user1_id == current_user.user_id
+            other_user_id = match.user2_id if is_user1 else match.user1_id
+            
+            # Get the other user's profile
+            other_user = db.query(models.User).filter(models.User.user_id == other_user_id).first()
+            if not other_user:
+                continue
 
-                if other_user:
-                    # Check if any valid skill combinations exist that haven't been traded before
-                    valid_combinations_exist = False
-                    for teach_id in matching_teach:
-                        for learn_id in matching_learn:
-                            teach_skill = skill_id_to_name.get(teach_id)
-                            learn_skill = skill_id_to_name.get(learn_id)
-                            if teach_skill and learn_skill:
-                                combination = (user_id, teach_skill, learn_skill)
-                                if combination not in completed_trade_combinations:
-                                    valid_combinations_exist = True
-                                    break
-                        if valid_combinations_exist:
-                            break
+            # Get the other user's skills
+            other_user_teaching_skills, other_user_learning_skills = crud.get_user_skills(db, other_user_id)
 
-                    if valid_combinations_exist:
-                        # Get skill names for display
-                        teaching_skill_names = [skill_id_to_name[skill_id] for skill_id in matching_teach]
-                        learning_skill_names = [skill_id_to_name[skill_id] for skill_id in matching_learn]
+            formatted_matches.append({
+                "match_id": match.match_id,
+                "user_id": other_user.user_id,
+                "username": other_user.username,
+                "photo": other_user.photo,
+                "location": other_user.location,
+                "bio": other_user.bio,
+                "teaching": [skill.skill_name for skill in other_user_teaching_skills],
+                "learning": [skill.skill_name for skill in other_user_learning_skills],
+                "rating": other_user.rating,
+                "match_status": match.match_status,
+                "trade_request_time": match.trade_request_time,
+                "initiator_id": match.initiator_id
+            })
 
-                        # Check for existing match
-                        existing_match = db.query(models.Match).filter(
-                            or_(
-                                and_(
-                                    models.Match.user1_id == current_user.user_id,
-                                    models.Match.user2_id == user_id
-                                ),
-                                and_(
-                                    models.Match.user1_id == user_id,
-                                    models.Match.user2_id == current_user.user_id
-                                )
-                            )
-                        ).first()
-
-                        if existing_match:
-                            match_dict = {
-                                "match_id": existing_match.match_id,
-                                "username": other_user.username,
-                                "user_id": other_user.user_id,
-                                "teaching": teaching_skill_names,
-                                "learning": learning_skill_names,
-                                "match_status": existing_match.match_status,
-                                "initiator_id": existing_match.initiator_id,
-                                "rating": other_user.rating,
-                                "trade_request_time": existing_match.trade_request_time
-                            }
-                        else:
-                            # Create new match
-                            new_match = models.Match(
-                                user1_id=min(current_user.user_id, user_id),
-                                user2_id=max(current_user.user_id, user_id),
-                                match_status="pending",
-                                trade_request_time=None
-                            )
-                            db.add(new_match)
-                            db.commit()
-                            db.refresh(new_match)
-
-                            match_dict = {
-                                "match_id": new_match.match_id,
-                                "username": other_user.username,
-                                "user_id": other_user.user_id,
-                                "teaching": teaching_skill_names,
-                                "learning": learning_skill_names,
-                                "match_status": new_match.match_status,
-                                "initiator_id": None,
-                                "rating": other_user.rating,
-                                "trade_request_time": new_match.trade_request_time
-                            }
-
-                        potential_matches.append(match_dict)
-
-        return potential_matches
+        return formatted_matches
     except Exception as e:
-        logger.error(f"Error in get_matches: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting matches: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get matches")
 
 @app.get("/matches/active", response_model=List[schemas.MatchWithMessages], tags=["Matching"])
 async def get_active_matches(
@@ -1111,6 +1028,22 @@ async def reset_all_trades(
     try:
         reset_trades()
         return {"message": "Successfully reset all trades and related data"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/reset-all", tags=["Admin"])
+async def reset_all_data(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reset all tables in the database, including users. Only available in development."""
+    # Check if we're in development mode
+    if not os.getenv('DEVELOPMENT_MODE'):
+        raise HTTPException(status_code=403, detail="This endpoint is only available in development mode")
+    
+    try:
+        reset_all_tables()
+        return {"message": "Successfully reset all tables"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

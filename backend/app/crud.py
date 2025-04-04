@@ -22,7 +22,28 @@ def create_user(db: Session, user: schemas.UserCreate):
     return db_user
 
 def get_user_by_email(db: Session, email: str):
+    # Use select_from and join to ensure we get the latest user data
     return db.query(models.User).filter(models.User.email == email).first()
+
+def update_user_profile(db: Session, user_id: int, profile_data: schemas.UserProfileUpdate) -> models.User:
+    user = db.query(models.User).filter(models.User.user_id == user_id).first()
+    if not user:
+        return None
+    
+    # Update only provided fields (excluding username)
+    for field, value in profile_data.dict(exclude_unset=True).items():
+        setattr(user, field, value)
+    
+    try:
+        db.commit()
+        # Explicitly refresh the user object to ensure we have the latest data
+        db.refresh(user)
+        # Also update the user in any active sessions
+        db.expire_all()
+        return user
+    except Exception as e:
+        db.rollback()
+        raise e
 
 # Skill CRUD operations
 def create_skill(db: Session, skill: schemas.SkillCreate) -> models.Skill:

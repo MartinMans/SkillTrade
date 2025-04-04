@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { OverlayTrigger, Tooltip, Image } from 'react-bootstrap';
+import { Rating } from '@mui/material';
 import AddSkillModal from './AddSkillModal';
 import NoSkillsWarning from './NoSkillsWarning';
 import LoadingSpinner from './LoadingSpinner';
@@ -9,6 +10,9 @@ import ProfileNavBar from './ProfileNavBar';
 import ChatList from './ChatList';
 import TradeGuidelinesModal from './TradeGuidelinesModal';
 import TradeInterface from './TradeInterface';
+import ProfileCard from './ProfileCard';
+import UserProfileModal from './UserProfileModal';
+import { FaMapMarkerAlt } from 'react-icons/fa';
 
 function Dashboard() {
   const [userProfile, setUserProfile] = useState({
@@ -39,6 +43,8 @@ function Dashboard() {
   const [showTradeGuidelines, setShowTradeGuidelines] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [error, setError] = useState(null);
+  const [selectedUserProfile, setSelectedUserProfile] = useState(null);
+  const [showUserProfile, setShowUserProfile] = useState(false);
   const navigate = useNavigate();
 
   // Fetch user profile data and available skills
@@ -394,6 +400,38 @@ function Dashboard() {
     return skillMatches.some(match => match.match_status?.toUpperCase() === 'IN_TRADE');
   };
 
+  const handleUpdateProfile = async (updatedProfile) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/users/me/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatedProfile)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+
+      const updatedData = await response.json();
+      setUserProfile(prev => ({
+        ...prev,
+        ...updatedData
+      }));
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      throw error;
+    }
+  };
+
+  const handleUserClick = (user) => {
+    setSelectedUserProfile(user);
+    setShowUserProfile(true);
+  };
+
   if (profileLoading) {
     return <FullPageLoader />;
   }
@@ -443,7 +481,16 @@ function Dashboard() {
         <div className="row">
           {/* Profile Tab */}
           <div className={`col-12 ${activeSection === 'profile' ? '' : 'd-none'}`}>
-            <div className="profile-tab-content">
+            {/* Profile Card */}
+            <div className="mb-4">
+              <ProfileCard 
+                userProfile={userProfile}
+                onUpdateProfile={handleUpdateProfile}
+              />
+            </div>
+            
+            {/* Skills Section */}
+            <div className="row">
               <div className="col-md-6">
                 <div className="card mb-4">
                   <div className="card-header d-flex justify-content-between align-items-center">
@@ -481,7 +528,7 @@ function Dashboard() {
               </div>
 
               <div className="col-md-6">
-                <div className="card">
+                <div className="card mb-4">
                   <div className="card-header d-flex justify-content-between align-items-center">
                     <h5 className="mb-0">Learning Interests</h5>
                     <button
@@ -526,10 +573,8 @@ function Dashboard() {
               </div>
               <div className="card-body">
                 {!hasSkills ? (
-                  // When user has no skills at all
                   <NoSkillsWarning onNavigateToProfile={() => setActiveSection('profile')} />
                 ) : !hasRequiredSkills ? (
-                  // When user is missing either teaching or learning skills
                   <div className="alert alert-warning" role="alert">
                     <h4 className="alert-heading">Almost there!</h4>
                     <p>
@@ -560,105 +605,129 @@ function Dashboard() {
                 ) : (
                   <div className="matches-list">
                     {skillMatches.map((match) => (
-                      <div key={match.match_id} className="card">
+                      <div key={match.match_id} className="card match-card">
                         <div className="card-body">
                           {match.match_status?.toUpperCase() === 'IN_TRADE' ? (
                             <TradeInterface match={match} userProfile={userProfile} />
                           ) : (
                             <>
-                              <div className="d-flex justify-content-between align-items-start mb-2">
-                                <h5 className="card-title mb-0">{match.username}</h5>
-                                {match.match_status?.toUpperCase() === 'PENDING_TRADE' && (
-                                  <div className={`badge ${match.initiator_id === userProfile?.user_id ? 'bg-warning' : 'bg-info'} text-dark d-flex align-items-center gap-2`}>
-                                    {match.initiator_id === userProfile?.user_id ? (
-                                      <>
-                                        <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
-                                        Awaiting Response
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span className="badge bg-success">New</span>
-                                        This user wants to trade!
-                                      </>
-                                    )}
+                              <div className="d-flex">
+                                {/* Left side - Photo and User Info */}
+                                <div className="match-photo-container me-4 text-center" style={{ minWidth: '100px' }}>
+                                  <Image
+                                    src={match.photo || 'https://via.placeholder.com/150'}
+                                    roundedCircle
+                                    className="match-photo mb-2"
+                                    style={{ width: '100px', height: '100px', objectFit: 'cover' }}
+                                  />
+                                  <h5 className="mb-2">
+                                    <span 
+                                      className="user-link"
+                                      onClick={() => {
+                                        setSelectedUserProfile(match);
+                                        setShowUserProfile(true);
+                                      }}
+                                    >
+                                      {match.username}
+                                    </span>
+                                  </h5>
+                                  <div className="d-flex align-items-center justify-content-center">
+                                    <Rating 
+                                      value={match.rating || 5} 
+                                      readOnly 
+                                      size="small"
+                                    />
+                                    <span className="ms-1 text-muted">({match.rating || 5}/5)</span>
                                   </div>
-                                )}
-                              </div>
-                              <div className="skills-section">
-                                <p className="mb-2">
-                                  <strong>Teaching:</strong> {match.teaching.join(', ')}
-                                </p>
-                                <p className="mb-3">
-                                  <strong>Learning:</strong> {match.learning.join(', ')}
-                                </p>
-                              </div>
-                              <div className="d-flex gap-2">
-                                {match.match_status?.toUpperCase() === 'PENDING_TRADE' ? (
-                                  <>
-                                    {match.initiator_id === userProfile?.user_id ? (
-                                      <button 
-                                        className="btn btn-outline-danger d-flex align-items-center gap-2"
-                                        onClick={() => handleStartTrade(match.match_id)}
-                                      >
-                                        <i className="bi bi-x-circle"></i>
-                                        Cancel Trade Request
-                                      </button>
-                                    ) : (
-                                      <OverlayTrigger
-                                        placement="top"
-                                        overlay={
-                                          <Tooltip id={`tooltip-accept-${match.match_id}`}>
-                                            {hasActiveTrade() ? "You cannot accept a new trade while you have an active trade" : ""}
-                                          </Tooltip>
-                                        }
-                                      >
-                                        <span className="d-inline-block">
-                                          <button 
-                                            className="btn btn-success d-flex align-items-center gap-2"
+                                  {match.location && (
+                                    <p className="text-muted mb-2 mt-1">
+                                      <FaMapMarkerAlt className="me-1" /> {match.location}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {/* Right side - Info */}
+                                <div className="match-info flex-grow-1">
+                                  <div className="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                      {/* Status Badges */}
+                                      {match.match_status?.toUpperCase() === 'PENDING_TRADE' && (
+                                        <div className={`badge ${match.initiator_id === userProfile?.user_id ? 'bg-warning' : 'bg-info'} text-dark d-flex align-items-center gap-2 mb-3`}>
+                                          {match.initiator_id === userProfile?.user_id ? (
+                                            <>
+                                              <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
+                                              Awaiting Response
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span className="badge bg-success">New</span>
+                                              This user wants to trade!
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Trade Actions */}
+                                    {!hasActiveTrade() && match.match_status?.toUpperCase() !== 'IN_TRADE' && (
+                                      <div className="trade-actions">
+                                        <button
+                                          className="btn btn-outline-primary"
+                                          onClick={() => goToChat(match)}
+                                        >
+                                          <i className="bi bi-chat-dots me-2"></i>
+                                          Chat
+                                        </button>
+                                        {match.match_status?.toUpperCase() === 'PENDING_TRADE' ? (
+                                          <>
+                                            {match.initiator_id === userProfile?.user_id ? (
+                                              <button
+                                                className="btn btn-outline-secondary"
+                                                onClick={() => handleStartTrade(match.match_id)}
+                                              >
+                                                Cancel Request
+                                              </button>
+                                            ) : (
+                                              <button
+                                                className="btn btn-success"
+                                                onClick={() => {
+                                                  setSelectedMatch(match);
+                                                  setShowTradeGuidelines(true);
+                                                }}
+                                              >
+                                                Accept Trade
+                                              </button>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <button
+                                            className="btn btn-primary"
                                             onClick={() => {
                                               setSelectedMatch(match);
                                               setShowTradeGuidelines(true);
                                             }}
-                                            disabled={hasActiveTrade()}
                                           >
-                                            <i className="bi bi-check-circle"></i>
-                                            Accept Trade Request
+                                            Start Trade
                                           </button>
-                                        </span>
-                                      </OverlayTrigger>
+                                        )}
+                                      </div>
                                     )}
-                                  </>
-                                ) : (
-                                  <OverlayTrigger
-                                    placement="top"
-                                    overlay={
-                                      <Tooltip id={`tooltip-start-${match.match_id}`}>
-                                        {hasActiveTrade() ? "You cannot start a new trade while you have an active trade" : ""}
-                                      </Tooltip>
-                                    }
-                                  >
-                                    <span className="d-inline-block">
-                                      <button 
-                                        className="btn btn-primary d-flex align-items-center gap-2"
-                                        onClick={() => {
-                                          setSelectedMatch(match);
-                                          setShowTradeGuidelines(true);
-                                        }}
-                                        disabled={hasActiveTrade()}
-                                      >
-                                        <i className="bi bi-arrow-right-circle"></i>
-                                        Start Trade
-                                      </button>
-                                    </span>
-                                  </OverlayTrigger>
-                                )}
-                                <button 
-                                  className="btn btn-outline-primary d-flex align-items-center gap-2"
-                                  onClick={() => goToChat(match)}
-                                >
-                                  <i className="bi bi-chat-dots"></i>
-                                  Go to Chat
-                                </button>
+                                  </div>
+
+                                  {/* Skills Section */}
+                                  <div className="skills-section">
+                                    <div className="row">
+                                      <div className="col-6">
+                                        <p className="mb-1"><strong>Teaching:</strong></p>
+                                        <p className="mb-2">{match.teaching.join(', ')}</p>
+                                      </div>
+                                      <div className="col-6">
+                                        <p className="mb-1"><strong>Learning:</strong></p>
+                                        <p className="mb-2">{match.learning.join(', ')}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </>
                           )}
@@ -715,6 +784,13 @@ function Dashboard() {
         setSearchQuery={setSearchQuery}
         searchResults={searchResults}
         isSearching={isSearching}
+      />
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        user={selectedUserProfile}
+        show={showUserProfile}
+        onHide={() => setShowUserProfile(false)}
       />
     </div>
   );

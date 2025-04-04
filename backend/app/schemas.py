@@ -15,9 +15,17 @@ class UserOut(UserBase):
     user_id: int
     rating: float
     trade_token: int
+    photo: Optional[str] = None
+    location: Optional[str] = None
+    bio: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+class UserProfileUpdate(BaseModel):
+    photo: Optional[str] = None
+    location: Optional[str] = None
+    bio: Optional[str] = None
 
 # Token schema for JWT responses
 class Token(BaseModel):
@@ -61,6 +69,9 @@ class MatchResult(BaseModel):
     match_id: int
     user_id: int
     username: str
+    photo: Optional[str] = None
+    location: Optional[str] = None
+    bio: Optional[str] = None
     teaching: List[str]
     learning: List[str]
     rating: float

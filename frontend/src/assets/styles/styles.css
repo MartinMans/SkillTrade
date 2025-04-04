@@ -687,35 +687,199 @@ body {
   color: #fff;
 }
 
-/* Matches List Styles */
-.matches-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+/* Match Card Styles */
+.match-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  margin-bottom: 1rem;
+  overflow: hidden;
 }
 
-.match-item {
-  background-color: #fff;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  padding: 1rem;
+.match-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.match-photo-container {
+  flex-shrink: 0;
+}
+
+.match-photo {
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.match-info {
+  min-width: 0;
+}
+
+.user-link {
+  color: #2563eb;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.user-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+/* Trade Actions */
+.trade-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.trade-actions button {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
   transition: all 0.2s ease;
 }
 
-.match-item:hover {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.trade-actions button:hover {
   transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Text Styles */
-.text-muted {
-  color: #6c757d !important;
+.trade-actions .btn-primary {
+  background-color: #2563eb;
+  border-color: #2563eb;
 }
 
-h1 {
-  color: #333;
-  font-weight: 600;
+.trade-actions .btn-primary:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.trade-actions .btn-success {
+  background-color: #059669;
+  border-color: #059669;
+}
+
+.trade-actions .btn-success:hover {
+  background-color: #047857;
+  border-color: #047857;
+}
+
+.trade-actions .btn-outline-secondary {
+  color: #4b5563;
+  border-color: #d1d5db;
+}
+
+.trade-actions .btn-outline-secondary:hover {
+  color: #374151;
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+/* Status Badges */
+.badge {
+  padding: 0.5rem 0.75rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.badge.bg-warning {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+}
+
+.badge.bg-info {
+  background-color: #e0f2fe !important;
+  color: #0369a1 !important;
+}
+
+.badge.bg-success {
+  background-color: #059669 !important;
+  color: white !important;
+}
+
+.spinner-grow-sm {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+/* Skills Section */
+.skills-section {
+  background-color: #f8fafc;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+.skills-section p {
   margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.skills-section strong {
+  color: #4b5563;
+}
+
+/* User Profile Modal Styles */
+.user-profile-modal {
+  max-width: 1200px;
+  width: 90vw;
+}
+
+.user-profile-modal .modal-content {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.user-profile-modal .modal-body {
+  padding: 2rem;
+}
+
+.user-profile-modal .profile-photo {
+  border: 4px solid #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.user-profile-modal .basic-info {
+  flex: 1;
+}
+
+.user-profile-modal .bio-section {
+  background-color: #f8fafc;
+  padding: 1.25rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+  max-width: 600px;
+}
+
+.user-profile-modal .skills-container {
+  margin-top: 2rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 2rem;
+}
+
+.user-profile-modal .skill-category {
+  background-color: #f8fafc;
+  padding: 1.25rem;
+  border-radius: 8px;
+  min-height: 150px;
+}
+
+.user-profile-modal .skill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+}
+
+.user-profile-modal .skill-item {
+  background-color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  font-size: 0.9rem;
+  color: #4b5563;
+  display: inline-block;
 }
 
 /* Chat List Styles */
@@ -1137,4 +1301,104 @@ h1 {
 .trade-actions button:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Profile Card Styles */
+.profile-card {
+  background: #fff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  margin-bottom: 2rem;
+}
+
+.profile-card .card-body {
+  padding: 2rem;
+}
+
+.profile-photo-container {
+  position: relative;
+  display: inline-block;
+  margin-right: 2rem;
+}
+
+.profile-photo {
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.photo-upload-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px;
+  text-align: center;
+  border-bottom-left-radius: 50%;
+  border-bottom-right-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.photo-upload-overlay label {
+  color: white;
+  cursor: pointer;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.photo-upload-overlay label:hover {
+  opacity: 0.9;
+}
+
+.profile-info {
+  padding-left: 1rem;
+}
+
+.profile-info h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+}
+
+.profile-info .text-muted {
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.profile-info .btn-outline-primary {
+  border-width: 2px;
+  font-weight: 500;
+  padding: 0.375rem 1rem;
+}
+
+.profile-info .form-control {
+  border: 1px solid #e2e8f0;
+  padding: 0.625rem 1rem;
+  font-size: 1rem;
+  border-radius: 0.5rem;
+  background-color: #f8fafc;
+}
+
+.profile-info .form-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background-color: #fff;
+}
+
+.profile-info textarea.form-control {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.profile-info .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
 } 

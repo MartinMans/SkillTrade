@@ -52,7 +52,13 @@ async def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    user = crud.get_user_by_email(db, email=email)
+    
+    # Force a new query to get fresh user data
+    db.expire_all()  # Clear any cached data
+    user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise credentials_exception
+    
+    # Ensure we have the latest data
+    db.refresh(user)
     return user

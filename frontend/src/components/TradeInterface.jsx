@@ -132,7 +132,7 @@ const TradeInterface = ({ match, userProfile }) => {
         }
 
         alert('Trade completed successfully! The page will now refresh.');
-        window.location.reload();
+        window.location.href = '/dashboard';
     } catch (error) {
         console.error('Error completing trade:', error);
         alert(error.message || 'Failed to complete trade. Please try again.');
@@ -143,57 +143,57 @@ const TradeInterface = ({ match, userProfile }) => {
 
   const handleReportIssue = async (description) => {
     try {
-      setIsSubmitting(true);
-      const token = localStorage.getItem('token');
-      
-      // First get the trade_id for this match
-      const tradeResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/${match.match_id}/trade`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+        setIsSubmitting(true);
+        const token = localStorage.getItem('token');
+        
+        // First get the trade_id for this match
+        const tradeResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/matches/${match.match_id}/trade`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!tradeResponse.ok) {
+            const error = await tradeResponse.json();
+            throw new Error(error.detail || 'Failed to get trade information');
         }
-      });
 
-      if (!tradeResponse.ok) {
-        const error = await tradeResponse.json();
-        throw new Error(error.detail || 'Failed to get trade information');
-      }
+        const tradeData = await tradeResponse.json();
+        
+        // Submit the issue report
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/trades/${match.match_id}/report-issue`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                description,
+                trade_id: tradeData.trade_id
+            })
+        });
 
-      const tradeData = await tradeResponse.json();
-      
-      // Submit the issue report
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/trades/${match.match_id}/report-issue`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          description,
-          trade_id: tradeData.trade_id
-        })
-      });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to submit issue report');
+        }
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to submit issue report');
-      }
-
-      // Show success message
-      alert('Issue reported successfully. You will be redirected to your profile.');
-      
-      // Clear any local storage or state related to the current trade
-      localStorage.removeItem('currentTrade');
-      localStorage.removeItem('currentMatch');
-      
-      // Redirect to profile
-      window.location.href = '/profile';
+        // Show success message
+        alert('Issue reported successfully. You will be redirected to your dashboard.');
+        
+        // Clear any local storage or state related to the current trade
+        localStorage.removeItem('currentTrade');
+        localStorage.removeItem('currentMatch');
+        
+        // Redirect to dashboard
+        window.location.href = '/dashboard';
     } catch (error) {
-      console.error('Error reporting issue:', error);
-      alert(error.message || 'Failed to submit issue report. Please try again.');
+        console.error('Error reporting issue:', error);
+        alert(error.message || 'Failed to submit issue report. Please try again.');
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
   };
 
