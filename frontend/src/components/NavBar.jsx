@@ -103,20 +103,20 @@ function NavBar() {
                   About
                 </a>
               </li>
-              <li className="nav-item dropdown"
-                  onMouseEnter={handleMouseEnter}
-                  onMouseLeave={handleMouseLeave}>
-                <a className="nav-link dropdown-toggle" href="#" onClick={toggleDropdown}>
+              <li className="nav-item">
+                <a 
+                  className="nav-link" 
+                  href="#features"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigate('/');
+                    setTimeout(() => {
+                      handleSmoothScroll('#features');
+                    }, 100);
+                  }}
+                >
                   Features
                 </a>
-                {isDropdownVisible && (
-                  <div className="custom-dropdown show">
-                    <p className="dropdown-item-custom">AI-Powered Matching</p>
-                    <p className="dropdown-item-custom">Skill-Based Token Exchange</p>
-                    <p className="dropdown-item-custom">Fair Trade System</p>
-                    <p className="dropdown-item-custom">Rating System</p>
-                  </div>
-                )}
               </li>
               <li className="nav-item">
                 <button 

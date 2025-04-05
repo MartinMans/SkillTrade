@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import NavBar from './NavBar';
 import HeroSection from './HeroSection';
 import SignupModal from './SignupModal';
+import Features from './Features';
 
 function HomePage() {
   const [showModal, setShowModal] = useState(false);
@@ -24,22 +25,22 @@ function HomePage() {
       <NavBar />
       <HeroSection onStartTrading={handleAuthClick} />
       <div className="unified-section">
-        <section id="about">
+        <section id="about" className="unified-section">
           <div className="container">
-            <h2 className="text-center">About</h2>
-            <div className="card about-card">
-              <div className="card-body">
-                <p className="card-text text-center">
-                  SkillTrade is a platform that allows you to both teach and learn skills simultaneously, creating a truly reciprocal learning experience.
-                  Our AI-powered matching system connects you with the perfect trade partner based on your skills and learning interests, ensuring every exchange is valuable.
-                  With our unique Trade Token system, users commit their full attention to a single trade at a time, fostering high-quality, focused learning sessions.
-                  Whether you want to share your expertise or gain new knowledge, SkillTrade provides a structured, trustworthy, and engaging way to grow—for free.
+            <div className="row justify-content-center">
+              <div className="col-lg-6">
+                <p className="text-center" style={{ color: '#000', fontSize: '1.4rem', lineHeight: '2' }}>
+                  SkillTrade is a revolutionary platform that connects individuals based on their unique skills and learning goals. 
+                  Our mission is to create a community where knowledge sharing becomes a two-way street, enabling everyone to 
+                  both teach and learn. Whether you're looking to master a new language, develop technical skills, or explore 
+                  creative arts, SkillTrade provides the perfect environment for meaningful skill exchanges.
                 </p>
               </div>
             </div>
           </div>
         </section>
       </div>
+      <Features />
       <SignupModal show={showModal} onClose={handleCloseModal} />
     </div>
   );

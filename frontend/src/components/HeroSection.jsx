@@ -3,11 +3,10 @@ function HeroSection({ onStartTrading }) {
     <div className="hero-section">
       <div className="hero-content text-center">
         <h1 className="hero-title">
-          SkillTrade<br />
-          Connect. Match. Trade.
+          SkillTrade
         </h1>
-        <p className="mini-about">
-          SkillTrade is a platform that allows you to both teach and learn skills simultaneously, creating a truly reciprocal learning experience.
+        <p className="hero-subtitle">
+          Connect. Match. Trade.
         </p>
         <button className="btn btn-light hero-btn" onClick={onStartTrading}>
           Start Trading
