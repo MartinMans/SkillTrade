@@ -105,3 +105,6 @@ htmlcov/
 *.dylib
 *.dll
 *.exe
+
+# Unit tests:
+__init__.py
